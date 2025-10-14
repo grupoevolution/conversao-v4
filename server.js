@@ -774,6 +774,9 @@ app.post('/webhook/evolution', async (req, res) => {
         const fromMe = messageData.key.fromMe;
         const messageText = extractMessageText(messageData.message);
         
+        // 🆕 NOVO: Detectar qual instância recebeu a mensagem
+        const instanceName = data.instance || null;
+        
         const incomingPhone = remoteJid.replace('@s.whatsapp.net', '');
         const phoneKey = extractPhoneKey(incomingPhone);
         
@@ -801,7 +804,14 @@ app.post('/webhook/evolution', async (req, res) => {
                     const funnel = funis.get(triggeredFunnelId);
                     
                     if (funnel && funnel.steps && funnel.steps.length > 0) {
-                        addLog('PHRASE_FUNNEL_START', `Iniciando funil por frase`, { phoneKey, funnelId: triggeredFunnelId });
+                        addLog('PHRASE_FUNNEL_START', `Iniciando funil por frase via ${instanceName}`, { phoneKey, funnelId: triggeredFunnelId });
+                        
+                        // 🆕 NOVO: Definir sticky instance ANTES de iniciar o funil
+                        if (instanceName && INSTANCES.includes(instanceName)) {
+                            stickyInstances.set(phoneKey, instanceName);
+                            addLog('STICKY_INSTANCE_SET', `Sticky instance definida: ${instanceName}`, { phoneKey });
+                        }
+                        
                         await startFunnel(
                             phoneKey, 
                             remoteJid, 
