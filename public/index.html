@@ -767,6 +767,24 @@
         </div>
     </div>
 
+    <!-- MODAL CRIAR NOVO FUNIL -->
+    <div id="createFunnelModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Criar Novo Funil por Frase</div>
+            
+            <div class="form-group">
+                <label class="form-label">Nome do Funil:</label>
+                <input type="text" id="newFunnelName" class="form-input" placeholder="Ex: Anúncio Facebook">
+                <small style="color: #6b7280;">Escolha um nome descritivo para identificar o funil</small>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn" style="flex: 1;" onclick="closeCreateFunnelModal()">Cancelar</button>
+                <button class="btn btn-success" style="flex: 1;" onclick="createNewFunnel()">Criar Funil</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentFunnelData = null;
         let editingStepIndex = -1;
@@ -1437,6 +1455,56 @@
             }
         }
 
+        // CRIAR NOVO FUNIL
+        function openCreateFunnelModal() {
+            document.getElementById('newFunnelName').value = '';
+            document.getElementById('createFunnelModal').classList.add('active');
+        }
+
+        function closeCreateFunnelModal() {
+            document.getElementById('createFunnelModal').classList.remove('active');
+        }
+
+        async function createNewFunnel() {
+            const name = document.getElementById('newFunnelName').value.trim();
+            
+            if (!name) {
+                alert('Digite o nome do funil!');
+                return;
+            }
+            
+            // Gerar ID único
+            const id = 'PHRASE_' + name.toUpperCase().replace(/[^A-Z0-9]/g, '_').substring(0, 20) + '_' + Date.now();
+            
+            const newFunnel = {
+                id: id,
+                name: name,
+                steps: []
+            };
+            
+            try {
+                const response = await fetch('/api/funnels', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newFunnel)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`✅ Funil "${name}" criado com sucesso!\n\nAgora você pode adicionar blocos a ele.`);
+                    closeCreateFunnelModal();
+                    await loadAllFunnels();
+                    document.getElementById('funnelSelect').value = id;
+                    loadFunnelEditor();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro ao criar funil: ' + error.message);
+            }
+        }
+
         // INICIALIZAÇÃO
         document.addEventListener('DOMContentLoaded', async function() {
             await loadAllFunnels();
@@ -1460,6 +1528,62 @@
                 closePhraseModal();
             }
         });
+
+        document.getElementById('createFunnelModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCreateFunnelModal();
+            }
+        });
+
+        // CRIAR NOVO FUNIL
+        function openCreateFunnelModal() {
+            document.getElementById('newFunnelName').value = '';
+            document.getElementById('createFunnelModal').classList.add('active');
+        }
+
+        function closeCreateFunnelModal() {
+            document.getElementById('createFunnelModal').classList.remove('active');
+        }
+
+        async function createNewFunnel() {
+            const name = document.getElementById('newFunnelName').value.trim();
+            
+            if (!name) {
+                alert('Digite o nome do funil!');
+                return;
+            }
+            
+            // Gerar ID único
+            const id = 'PHRASE_' + name.toUpperCase().replace(/[^A-Z0-9]/g, '_').substring(0, 20) + '_' + Date.now();
+            
+            const newFunnel = {
+                id: id,
+                name: name,
+                steps: []
+            };
+            
+            try {
+                const response = await fetch('/api/funnels', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newFunnel)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`✅ Funil "${name}" criado com sucesso!\n\nAgora você pode adicionar blocos a ele.`);
+                    closeCreateFunnelModal();
+                    await loadAllFunnels();
+                    document.getElementById('funnelSelect').value = id;
+                    loadFunnelEditor();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro ao criar funil: ' + error.message);
+            }
+        }
     </script>
 </body>
 </html>
