@@ -292,10 +292,17 @@ function addLog(type, message, data = null) {
 function checkPhraseTrigger(phoneKey, messageText) {
     const normalizedMessage = messageText.toLowerCase().trim();
     
+    addLog('PHRASE_CHECK_START', `Normalizando mensagem: "${normalizedMessage}"`, { phoneKey });
+    
     for (const [phrase, data] of phraseTriggers.entries()) {
-        if (!data.active) continue;
+        if (!data.active) {
+            addLog('PHRASE_SKIP_INACTIVE', `Frase inativa: "${phrase}"`, { phoneKey });
+            continue;
+        }
         
         const normalizedPhrase = phrase.toLowerCase().trim();
+        
+        addLog('PHRASE_COMPARING', `Comparando "${normalizedMessage}" com "${normalizedPhrase}"`, { phoneKey, match: normalizedMessage === normalizedPhrase });
         
         if (normalizedMessage === normalizedPhrase) {
             // Verificar cooldown
@@ -320,6 +327,7 @@ function checkPhraseTrigger(phoneKey, messageText) {
         }
     }
     
+    addLog('PHRASE_NOT_FOUND', `Nenhuma frase correspondente para: "${normalizedMessage}"`, { phoneKey });
     return null;
 }
 
@@ -413,11 +421,15 @@ async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFir
     let instancesToTry = [...INSTANCES];
     const stickyInstance = stickyInstances.get(phoneKey);
     
-    if (stickyInstance && !isFirstMessage) {
+    // 🆕 CORREÇÃO: Se já tem sticky instance, SEMPRE usa ela primeiro (mesmo em primeira mensagem)
+    if (stickyInstance) {
         instancesToTry = [stickyInstance, ...INSTANCES.filter(i => i !== stickyInstance)];
+        addLog('SEND_USING_STICKY', `Usando sticky instance: ${stickyInstance}`, { phoneKey, isFirstMessage });
     } else if (isFirstMessage) {
+        // Só faz rodízio se NÃO tiver sticky instance
         const nextIndex = (lastSuccessfulInstanceIndex + 1) % INSTANCES.length;
         instancesToTry = [...INSTANCES.slice(nextIndex), ...INSTANCES.slice(0, nextIndex)];
+        addLog('SEND_USING_ROTATION', `Usando rodízio, próxima: ${instancesToTry[0]}`, { phoneKey });
     }
     
     let lastError = null;
@@ -435,7 +447,8 @@ async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFir
                 
                 if (result && result.ok) {
                     stickyInstances.set(phoneKey, instanceName);
-                    if (isFirstMessage) {
+                    if (isFirstMessage && !stickyInstance) {
+                        // Só atualiza o índice se for rodízio (não tinha sticky)
                         lastSuccessfulInstanceIndex = INSTANCES.indexOf(instanceName);
                     }
                     addLog('SEND_SUCCESS', `Mensagem enviada via ${instanceName}`, { phoneKey, type });
@@ -796,8 +809,13 @@ app.post('/webhook/evolution', async (req, res) => {
         try {
             const conversation = findConversationByPhone(incomingPhone);
             
+            // 🆕 DEBUG: Log da mensagem recebida
+            addLog('WEBHOOK_MESSAGE_RECEIVED', `Mensagem: "${messageText}" | Instância: ${instanceName}`, { phoneKey });
+            
             // 🆕 NOVO: Verificar frase-chave APENAS se não estiver em conversa ativa
             if (!conversation || conversation.completed || conversation.canceled) {
+                addLog('WEBHOOK_CHECK_PHRASE', `Verificando frases-chave para: "${messageText}"`, { phoneKey, totalPhrases: phraseTriggers.size });
+                
                 const triggeredFunnelId = checkPhraseTrigger(phoneKey, messageText);
                 
                 if (triggeredFunnelId) {
