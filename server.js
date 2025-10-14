@@ -387,11 +387,57 @@ async function sendVideo(remoteJid, videoUrl, caption, instanceName) {
 }
 
 async function sendAudio(remoteJid, audioUrl, instanceName) {
-    return await sendToEvolution(instanceName, '/message/sendMedia', {
-        number: remoteJid.replace('@s.whatsapp.net', ''),
-        mediatype: 'audio',
-        media: audioUrl
-    });
+    try {
+        addLog('AUDIO_DOWNLOAD_START', `Baixando áudio de ${audioUrl}`);
+        
+        // 1. Baixar o áudio da URL
+        const audioResponse = await axios.get(audioUrl, {
+            responseType: 'arraybuffer',
+            timeout: 30000,
+            headers: {
+                'User-Agent': 'Mozilla/5.0'
+            }
+        });
+        
+        // 2. Converter para Base64
+        const base64Audio = Buffer.from(audioResponse.data, 'binary').toString('base64');
+        const audioBase64 = `data:audio/mpeg;base64,${base64Audio}`;
+        
+        addLog('AUDIO_CONVERTED', `Áudio convertido para base64 (${Math.round(base64Audio.length / 1024)}KB)`);
+        
+        // 3. Tentar enviar como PTT (mensagem de voz)
+        const result = await sendToEvolution(instanceName, '/message/sendWhatsAppAudio', {
+            number: remoteJid.replace('@s.whatsapp.net', ''),
+            audio: audioBase64,
+            delay: 1200,
+            encoding: true
+        });
+        
+        if (result.ok) {
+            addLog('AUDIO_SENT_PTT', `Áudio enviado como PTT com sucesso`);
+            return result;
+        }
+        
+        // 4. Fallback: tentar formato alternativo
+        addLog('AUDIO_FALLBACK_MEDIA', `Tentando formato alternativo`);
+        return await sendToEvolution(instanceName, '/message/sendMedia', {
+            number: remoteJid.replace('@s.whatsapp.net', ''),
+            mediatype: 'audio',
+            media: audioBase64,
+            mimetype: 'audio/mpeg'
+        });
+        
+    } catch (error) {
+        addLog('AUDIO_ERROR', `Erro ao processar áudio: ${error.message}`);
+        
+        // 5. Fallback final: tentar enviar URL direta
+        addLog('AUDIO_FALLBACK_URL', `Usando fallback com URL direta`);
+        return await sendToEvolution(instanceName, '/message/sendWhatsAppAudio', {
+            number: remoteJid.replace('@s.whatsapp.net', ''),
+            audio: audioUrl,
+            delay: 1200
+        });
+    }
 }
 
 // ============ ENVIO COM RETRY ============
