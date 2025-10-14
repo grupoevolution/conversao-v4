@@ -387,10 +387,12 @@ async function sendVideo(remoteJid, videoUrl, caption, instanceName) {
 }
 
 async function sendAudio(remoteJid, audioUrl, instanceName) {
-    return await sendToEvolution(instanceName, '/message/sendMedia', {
+    // Usa o endpoint específico para áudio de voz (círculo verde no WhatsApp)
+    return await sendToEvolution(instanceName, '/message/sendWhatsAppAudio', {
         number: remoteJid.replace('@s.whatsapp.net', ''),
-        mediatype: 'audio',
-        media: audioUrl
+        audioMessage: {
+            audio: audioUrl
+        }
     });
 }
 
