@@ -389,9 +389,8 @@ async function sendVideo(remoteJid, videoUrl, caption, instanceName) {
 async function sendAudio(remoteJid, audioUrl, instanceName) {
     return await sendToEvolution(instanceName, '/message/sendMedia', {
         number: remoteJid.replace('@s.whatsapp.net', ''),
-        mediaType: 'audio',
-        media: audioUrl,
-        mimetype: 'audio/mpeg'
+        mediatype: 'audio',
+        media: audioUrl
     });
 }
 
