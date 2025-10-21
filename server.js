@@ -24,7 +24,6 @@ const PRODUCT_MAPPING = {
     '5288799c-d8e3-48ce-a91d-587814acdee5': 'FB'
 };
 
-// 🆕 ATUALIZADO: 15 instâncias agora
 const INSTANCES = [
     'GABY01', 'GABY02', 'GABY03', 'GABY04', 'GABY05', 
     'GABY06', 'GABY07', 'GABY08', 'GABY09', 'GABY10', 
@@ -37,13 +36,12 @@ let phoneIndex = new Map();
 let stickyInstances = new Map();
 let pixTimeouts = new Map();
 let webhookLocks = new Map();
-let logs = []; // 🆕 MELHORADO: Agora com mais detalhes
+let logs = [];
 let funis = new Map();
 let lastSuccessfulInstanceIndex = -1;
 let phraseTriggers = new Map();
 let phraseCooldowns = new Map();
 
-// 🆕 NOVO: Sistema de logs aprimorado
 const LOG_LEVELS = {
     DEBUG: 'DEBUG',
     INFO: 'INFO',
@@ -91,7 +89,7 @@ function addLog(type, message, data = null, level = LOG_LEVELS.INFO) {
 async function saveLogsToFile() {
     try {
         await ensureDataDir();
-        const recentLogs = logs.slice(0, 1000); // Salva últimos 1000
+        const recentLogs = logs.slice(0, 1000);
         await fs.writeFile(LOGS_FILE, JSON.stringify(recentLogs, null, 2));
     } catch (error) {
         console.error('Erro ao salvar logs:', error.message);
@@ -336,7 +334,6 @@ function extractMessageText(message) {
     return '[MENSAGEM]';
 }
 
-// 🆕 MELHORADO: Validação de estado da conversa
 function validateConversationState(conversation, phoneKey) {
     const issues = [];
     
@@ -364,7 +361,7 @@ function validateConversationState(conversation, phoneKey) {
     return true;
 }
 
-// Detecção de frase-chave
+// 🆕 ATUALIZADO: Detecção de frase-chave com CONTAINS (mesma ordem)
 function checkPhraseTrigger(phoneKey, messageText) {
     const normalizedMessage = messageText.toLowerCase().trim();
     
@@ -378,7 +375,8 @@ function checkPhraseTrigger(phoneKey, messageText) {
         
         const normalizedPhrase = phrase.toLowerCase().trim();
         
-        if (normalizedMessage === normalizedPhrase) {
+        // 🆕 MUDANÇA: Agora verifica se a mensagem CONTÉM a frase (não precisa ser idêntica)
+        if (normalizedMessage.includes(normalizedPhrase)) {
             const cooldownKey = `${phoneKey}:${phrase}`;
             const lastTrigger = phraseCooldowns.get(cooldownKey);
             
@@ -390,7 +388,7 @@ function checkPhraseTrigger(phoneKey, messageText) {
             }
             
             addLog('PHRASE_TRIGGERED', `Frase detectada: "${phrase}"`, 
-                { phoneKey, funnelId: data.funnelId }, LOG_LEVELS.INFO);
+                { phoneKey, funnelId: data.funnelId, messageReceived: normalizedMessage }, LOG_LEVELS.INFO);
             
             phraseCooldowns.set(cooldownKey, Date.now());
             data.triggerCount = (data.triggerCount || 0) + 1;
@@ -446,24 +444,22 @@ async function sendText(remoteJid, text, instanceName) {
     });
 }
 
-// 🆕 NOVO: Suporte para ViewOnce
-async function sendImage(remoteJid, imageUrl, caption, instanceName, viewOnce = false) {
+// 🆕 ATUALIZADO: Removido parâmetro viewOnce
+async function sendImage(remoteJid, imageUrl, caption, instanceName) {
     return await sendToEvolution(instanceName, '/message/sendMedia', {
         number: remoteJid.replace('@s.whatsapp.net', ''),
         mediatype: 'image',
         media: imageUrl,
-        caption: caption || '',
-        viewOnce: viewOnce
+        caption: caption || ''
     });
 }
 
-async function sendVideo(remoteJid, videoUrl, caption, instanceName, viewOnce = false) {
+async function sendVideo(remoteJid, videoUrl, caption, instanceName) {
     return await sendToEvolution(instanceName, '/message/sendMedia', {
         number: remoteJid.replace('@s.whatsapp.net', ''),
         mediatype: 'video',
         media: videoUrl,
-        caption: caption || '',
-        viewOnce: viewOnce
+        caption: caption || ''
     });
 }
 
@@ -514,8 +510,8 @@ async function sendAudio(remoteJid, audioUrl, instanceName) {
     }
 }
 
-// ============ ENVIO COM RETRY E FALLBACK ============
-async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFirstMessage = false, viewOnce = false) {
+// 🆕 ATUALIZADO: Removido parâmetro viewOnce
+async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFirstMessage = false) {
     let instancesToTry = [...INSTANCES];
     const stickyInstance = stickyInstances.get(phoneKey);
     
@@ -541,9 +537,9 @@ async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFir
                 if (type === 'text') {
                     result = await sendText(remoteJid, text, instanceName);
                 } else if (type === 'image') {
-                    result = await sendImage(remoteJid, mediaUrl, text || '', instanceName, viewOnce);
+                    result = await sendImage(remoteJid, mediaUrl, text || '', instanceName);
                 } else if (type === 'video') {
-                    result = await sendVideo(remoteJid, mediaUrl, text || '', instanceName, viewOnce);
+                    result = await sendVideo(remoteJid, mediaUrl, text || '', instanceName);
                 } else if (type === 'audio') {
                     result = await sendAudio(remoteJid, mediaUrl, instanceName);
                 }
@@ -720,7 +716,6 @@ async function startFunnel(phoneKey, remoteJid, funnelId, orderCode, customerNam
     await sendStep(phoneKey);
 }
 
-// 🆕 MELHORADO: sendStep com validações extras
 async function sendStep(phoneKey) {
     const conversation = conversations.get(phoneKey);
     
@@ -730,7 +725,6 @@ async function sendStep(phoneKey) {
         return;
     }
     
-    // Validar estado
     if (!validateConversationState(conversation, phoneKey)) {
         addLog('STEP_INVALID_STATE', 'Estado inválido detectado', 
             { phoneKey, conversation }, LOG_LEVELS.ERROR);
@@ -771,7 +765,6 @@ async function sendStep(phoneKey) {
     
     let result = { success: true };
     
-    // Delay antes de enviar
     if (step.delayBefore && step.delayBefore > 0) {
         const delaySeconds = parseInt(step.delayBefore);
         addLog('STEP_DELAY_BEFORE', `Aguardando ${delaySeconds}s`, 
@@ -779,29 +772,25 @@ async function sendStep(phoneKey) {
         await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
     }
     
-    // Mostrar "digitando"
     if (step.showTyping && step.type !== 'delay') {
         addLog('STEP_SHOW_TYPING', 'Mostrando digitando por 3s', 
             { phoneKey }, LOG_LEVELS.DEBUG);
         await new Promise(resolve => setTimeout(resolve, 3000));
     }
     
-    // Enviar mensagem
     if (step.type === 'delay') {
         const delaySeconds = step.delaySeconds || 10;
         addLog('STEP_DELAY', `Delay de ${delaySeconds}s`, 
             { phoneKey }, LOG_LEVELS.DEBUG);
         await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
     } else {
-        const viewOnce = step.viewOnce || false;
         result = await sendWithFallback(
             phoneKey, 
             conversation.remoteJid, 
             step.type, 
             step.text, 
             step.mediaUrl, 
-            isFirstMessage,
-            viewOnce
+            isFirstMessage
         );
     }
     
@@ -829,7 +818,6 @@ async function sendStep(phoneKey) {
     }
 }
 
-// 🆕 MELHORADO: advanceConversation com validações
 async function advanceConversation(phoneKey, replyText, reason) {
     const conversation = conversations.get(phoneKey);
     
@@ -854,7 +842,6 @@ async function advanceConversation(phoneKey, replyText, reason) {
     
     const nextStepIndex = conversation.stepIndex + 1;
     
-    // Verificar se chegou ao fim
     if (nextStepIndex >= funnel.steps.length) {
         addLog('FUNNEL_END', `Funil ${conversation.funnelId} concluído`, 
             { phoneKey, totalSteps: funnel.steps.length }, LOG_LEVELS.INFO);
@@ -866,7 +853,6 @@ async function advanceConversation(phoneKey, replyText, reason) {
         return;
     }
     
-    // Avançar para próximo passo
     const previousStep = conversation.stepIndex;
     conversation.stepIndex = nextStepIndex;
     conversation.waiting_for_response = false;
@@ -974,7 +960,6 @@ app.post('/webhook/kirvano', async (req, res) => {
     }
 });
 
-// 🆕 MELHORADO: Webhook Evolution com logs detalhados
 app.post('/webhook/evolution', async (req, res) => {
     const requestId = Date.now() + Math.random();
     
@@ -1011,7 +996,6 @@ app.post('/webhook/evolution', async (req, res) => {
             return res.json({ success: true });
         }
         
-        // Adquirir lock
         const hasLock = await acquireWebhookLock(phoneKey);
         if (!hasLock) {
             addLog('EVOLUTION_LOCK_TIMEOUT', 'Não conseguiu lock', 
@@ -1022,7 +1006,6 @@ app.post('/webhook/evolution', async (req, res) => {
         try {
             const conversation = findConversationByPhone(incomingPhone);
             
-            // Verificar frase-chave
             if (!conversation || conversation.completed || conversation.canceled) {
                 addLog('EVOLUTION_CHECK_PHRASE', 'Verificando frases-chave', 
                     { requestId, phoneKey, message: messageText }, LOG_LEVELS.DEBUG);
@@ -1036,7 +1019,6 @@ app.post('/webhook/evolution', async (req, res) => {
                         addLog('PHRASE_FUNNEL_START', `Iniciando funil ${triggeredFunnelId}`, 
                             { requestId, phoneKey, instanceName }, LOG_LEVELS.INFO);
                         
-                        // Definir sticky instance
                         if (instanceName && INSTANCES.includes(instanceName)) {
                             stickyInstances.set(phoneKey, instanceName);
                             addLog('STICKY_INSTANCE_SET', `Sticky: ${instanceName}`, 
@@ -1062,7 +1044,6 @@ app.post('/webhook/evolution', async (req, res) => {
                 }
             }
             
-            // Processar resposta
             if (!conversation || conversation.canceled || !conversation.waiting_for_response) {
                 addLog('EVOLUTION_NOT_WAITING', 'Não aguardando resposta', 
                     { requestId, phoneKey, hasConv: !!conversation, 
@@ -1133,7 +1114,6 @@ app.get('/api/dashboard', (req, res) => {
     });
 });
 
-// 🆕 NOVO: Endpoint de logs completo
 app.get('/api/logs', (req, res) => {
     const limit = parseInt(req.query.limit) || 100;
     const level = req.query.level;
@@ -1173,7 +1153,6 @@ app.get('/api/logs', (req, res) => {
     });
 });
 
-// 🆕 NOVO: Export de logs
 app.get('/api/logs/export', (req, res) => {
     const format = req.query.format || 'json';
     const filename = `kirvano-logs-${new Date().toISOString().split('T')[0]}`;
@@ -1481,21 +1460,19 @@ async function initializeData() {
 
 app.listen(PORT, async () => {
     console.log('='.repeat(70));
-    console.log('🚀 KIRVANO SYSTEM V5.1 - SISTEMA COMPLETO DE FUNIS');
+    console.log('🚀 KIRVANO SYSTEM V5.2 - SISTEMA COMPLETO DE FUNIS');
     console.log('='.repeat(70));
     console.log('Porta:', PORT);
     console.log('Evolution:', EVOLUTION_BASE_URL);
     console.log('Instâncias:', INSTANCES.length);
     console.log('');
-    console.log('✅ NOVIDADES V5.1:');
-    console.log('  1. ✅ 15 instâncias (GABY01-GABY15)');
-    console.log('  2. ✅ Sistema de logs completo e exportável');
-    console.log('  3. ✅ Validações extras contra race conditions');
-    console.log('  4. ✅ Suporte para ViewOnce (imagem/vídeo)');
-    console.log('  5. ✅ Editor de funis melhorado (drag & drop)');
-    console.log('  6. ✅ Logs detalhados com níveis (DEBUG/INFO/WARNING/ERROR/CRITICAL)');
-    console.log('  7. ✅ Detecção de estados inconsistentes');
-    console.log('  8. ✅ Nova página /logs.html para análise');
+    console.log('✅ NOVIDADES V5.2:');
+    console.log('  1. ✅ ViewOnce REMOVIDO (não suportado pela Evolution API)');
+    console.log('  2. ✅ Detecção de frases FLEXÍVEL (contém frase na mesma ordem)');
+    console.log('  3. ✅ 15 instâncias (GABY01-GABY15)');
+    console.log('  4. ✅ Sistema de logs completo e exportável');
+    console.log('  5. ✅ Validações extras contra race conditions');
+    console.log('  6. ✅ Editor de funis melhorado');
     console.log('');
     console.log('📡 Endpoints:');
     console.log('  POST /webhook/kirvano       - Eventos Kirvano');
