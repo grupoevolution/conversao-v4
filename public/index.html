@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kirvano V5.1 - Sistema Completo de Funis</title>
+    <title>Kirvano V5.2 - Sistema Completo de Funis</title>
     <style>
         * {
             margin: 0;
@@ -560,16 +560,6 @@
         .badge-secondary { background: #f3f4f6; color: #374151; }
         .badge-purple { background: #ede9fe; color: #6d28d9; }
 
-        .viewonce-badge {
-            background: #fef3c7;
-            color: #92400e;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-size: 10px;
-            font-weight: bold;
-            margin-left: 8px;
-        }
-
         @media (max-width: 768px) {
             .funnel-editor {
                 flex-direction: column;
@@ -591,7 +581,7 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Kirvano - Sistema Completo de Funis <span class="version-badge">v5.1</span></h1>
+            <h1>Kirvano - Sistema Completo de Funis <span class="version-badge">v5.2</span></h1>
             <p>Sistema unificado: Funis Kirvano + Funis por Frase-Chave | 15 Instâncias Ativas</p>
             
             <div class="stats-grid">
@@ -771,8 +761,8 @@
             
             <div class="form-group">
                 <label class="form-label">Frase que ativa o funil:</label>
-                <input type="text" id="modalPhrase" class="form-input" placeholder="Ex: Oi Gaby quero te ajudar">
-                <small style="color: #6b7280;">A frase deve ser exatamente como o cliente vai enviar</small>
+                <input type="text" id="modalPhrase" class="form-input" placeholder="Ex: oi gaby vim pelo insta">
+                <small style="color: #6b7280;">A mensagem do cliente deve CONTER essa frase (na mesma ordem) para disparar o funil</small>
             </div>
             
             <div class="form-group">
@@ -909,8 +899,7 @@
                 mediaUrl: '',
                 delayBefore: 0,
                 showTyping: false,
-                waitForReply: false,
-                viewOnce: false
+                waitForReply: false
             };
             
             if (type === 'delay') {
@@ -1002,7 +991,6 @@
                                 <div class="step-type">
                                     <span>${stepIcon}</span>
                                     <span>${stepTypeName}</span>
-                                    ${step.viewOnce ? '<span class="viewonce-badge">VIEW ONCE</span>' : ''}
                                 </div>
                             </div>
                             <div class="step-actions">
@@ -1025,7 +1013,6 @@
                                     ${step.text ? `<strong>Texto:</strong> ${step.text.substring(0, 100)}${step.text.length > 100 ? '...' : ''}` : ''}
                                     ${step.mediaUrl ? `<br><strong>Mídia:</strong> ${step.mediaUrl.substring(0, 50)}...` : ''}
                                     ${step.waitForReply ? '<br><span style="color: #dc2626;">⏸️ Aguardar resposta</span>' : ''}
-                                    ${step.viewOnce ? '<br><span style="color: #f59e0b;">👁️ Visualização única</span>' : ''}
                                 `}
                             </div>
                             
@@ -1052,15 +1039,6 @@
                                         placeholder="https://exemplo.com/arquivo.${step.type === 'audio' ? 'mp3' : step.type === 'video' ? 'mp4' : 'jpg'}"
                                         value="${step.mediaUrl || ''}"
                                         oninput="updateStep(${index}, 'mediaUrl', this.value)">
-                                </div>
-                                ` : ''}
-
-                                ${(step.type === 'image' || step.type === 'video') ? `
-                                <div class="form-checkbox">
-                                    <input type="checkbox" id="viewonce_${index}" 
-                                        ${step.viewOnce ? 'checked' : ''}
-                                        onchange="updateStep(${index}, 'viewOnce', this.checked)">
-                                    <label for="viewonce_${index}">👁️ Visualização Única (ViewOnce)</label>
                                 </div>
                                 ` : ''}
                                 
