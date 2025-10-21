@@ -1025,7 +1025,6 @@
                                     ${step.text ? `<strong>Texto:</strong> ${step.text.substring(0, 100)}${step.text.length > 100 ? '...' : ''}` : ''}
                                     ${step.mediaUrl ? `<br><strong>Mídia:</strong> ${step.mediaUrl.substring(0, 50)}...` : ''}
                                     ${step.waitForReply ? '<br><span style="color: #dc2626;">⏸️ Aguardar resposta</span>' : ''}
-                                    ${step.viewOnce ? '<br><span style="color: #f59e0b;">👁️ Visualização única</span>' : ''}
                                 `}
                             </div>
                             
@@ -1052,15 +1051,6 @@
                                         placeholder="https://exemplo.com/arquivo.${step.type === 'audio' ? 'mp3' : step.type === 'video' ? 'mp4' : 'jpg'}"
                                         value="${step.mediaUrl || ''}"
                                         oninput="updateStep(${index}, 'mediaUrl', this.value)">
-                                </div>
-                                ` : ''}
-
-                                ${(step.type === 'image' || step.type === 'video') ? `
-                                <div class="form-checkbox">
-                                    <input type="checkbox" id="viewonce_${index}" 
-                                        ${step.viewOnce ? 'checked' : ''}
-                                        onchange="updateStep(${index}, 'viewOnce', this.checked)">
-                                    <label for="viewonce_${index}">👁️ Visualização Única (ViewOnce)</label>
                                 </div>
                                 ` : ''}
                                 
