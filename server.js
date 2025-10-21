@@ -446,49 +446,25 @@ async function sendText(remoteJid, text, instanceName) {
     });
 }
 
-// 🧪 EXPERIMENTAL: Tentativa de ViewOnce via mediaMessage
+// 🆕 NOVO: Suporte para ViewOnce
 async function sendImage(remoteJid, imageUrl, caption, instanceName, viewOnce = false) {
-    const payload = {
+    return await sendToEvolution(instanceName, '/message/sendMedia', {
         number: remoteJid.replace('@s.whatsapp.net', ''),
-        options: {
-            delay: 1200,
-            presence: 'composing'
-        },
-        mediaMessage: {
-            mediaType: 'image',
-            media: imageUrl,
-            caption: caption || ''
-        }
-    };
-    
-    // Tentar adicionar viewOnce se solicitado
-    if (viewOnce) {
-        payload.mediaMessage.viewOnce = true;
-    }
-    
-    return await sendToEvolution(instanceName, '/message/sendMedia', payload);
+        mediatype: 'image',
+        media: imageUrl,
+        caption: caption || '',
+        viewOnce: viewOnce
+    });
 }
 
 async function sendVideo(remoteJid, videoUrl, caption, instanceName, viewOnce = false) {
-    const payload = {
+    return await sendToEvolution(instanceName, '/message/sendMedia', {
         number: remoteJid.replace('@s.whatsapp.net', ''),
-        options: {
-            delay: 1200,
-            presence: 'composing'
-        },
-        mediaMessage: {
-            mediaType: 'video',
-            media: videoUrl,
-            caption: caption || ''
-        }
-    };
-    
-    // Tentar adicionar viewOnce se solicitado
-    if (viewOnce) {
-        payload.mediaMessage.viewOnce = true;
-    }
-    
-    return await sendToEvolution(instanceName, '/message/sendMedia', payload);
+        mediatype: 'video',
+        media: videoUrl,
+        caption: caption || '',
+        viewOnce: viewOnce
+    });
 }
 
 async function sendAudio(remoteJid, audioUrl, instanceName) {
@@ -539,7 +515,7 @@ async function sendAudio(remoteJid, audioUrl, instanceName) {
 }
 
 // ============ ENVIO COM RETRY E FALLBACK ============
-async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFirstMessage = false) {
+async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFirstMessage = false, viewOnce = false) {
     let instancesToTry = [...INSTANCES];
     const stickyInstance = stickyInstances.get(phoneKey);
     
@@ -565,9 +541,9 @@ async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFir
                 if (type === 'text') {
                     result = await sendText(remoteJid, text, instanceName);
                 } else if (type === 'image') {
-                    result = await sendImage(remoteJid, mediaUrl, text || '', instanceName);
+                    result = await sendImage(remoteJid, mediaUrl, text || '', instanceName, viewOnce);
                 } else if (type === 'video') {
-                    result = await sendVideo(remoteJid, mediaUrl, text || '', instanceName);
+                    result = await sendVideo(remoteJid, mediaUrl, text || '', instanceName, viewOnce);
                 } else if (type === 'audio') {
                     result = await sendAudio(remoteJid, mediaUrl, instanceName);
                 }
