@@ -1025,6 +1025,7 @@
                                     ${step.text ? `<strong>Texto:</strong> ${step.text.substring(0, 100)}${step.text.length > 100 ? '...' : ''}` : ''}
                                     ${step.mediaUrl ? `<br><strong>Mídia:</strong> ${step.mediaUrl.substring(0, 50)}...` : ''}
                                     ${step.waitForReply ? '<br><span style="color: #dc2626;">⏸️ Aguardar resposta</span>' : ''}
+                                    ${step.viewOnce ? '<br><span style="color: #f59e0b;">🧪 Visualização única (EXPERIMENTAL)</span>' : ''}
                                 `}
                             </div>
                             
@@ -1050,11 +1051,43 @@
                                     <input type="url" class="form-input" 
                                         placeholder="https://exemplo.com/arquivo.${step.type === 'audio' ? 'mp3' : step.type === 'video' ? 'mp4' : 'jpg'}"
                                         value="${step.mediaUrl || ''}"
-                                        oninput="updateStep(${index}, 'mediaUrl', this.value)">
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Delay antes desta mensagem (segundos)</label>
+                                    <input type="number" class="form-input" 
+                                        value="${step.delayBefore || ''}"
+                                        oninput="updateStep(${index}, 'delayBefore', this.value)">
+                                </div>
+
+                                ${(step.type === 'image' || step.type === 'video') ? `
+                                <div class="form-checkbox" style="background: #fff3cd; padding: 12px; border-radius: 6px; border: 1px solid #ffc107; margin-bottom: 12px;">
+                                    <input type="checkbox" id="viewonce_${index}" 
+                                        ${step.viewOnce ? 'checked' : ''}
+                                        onchange="updateStep(${index}, 'viewOnce', this.checked)">
+                                    <label for="viewonce_${index}">
+                                        🧪 <strong>Visualização Única (EXPERIMENTAL)</strong>
+                                        <div style="font-size: 11px; color: #856404; margin-top: 4px;">
+                                            Testamos e pode funcionar! A Evolution API passa o parâmetro para o Baileys.
+                                            Se não funcionar, nos avise nos logs.
+                                        </div>
+                                    </label>
                                 </div>
                                 ` : ''}
                                 
-                                <div class="form-group">
+                                <div class="form-checkbox">
+                                    <input type="checkbox" id="typing_${index}" 
+                                        ${step.showTyping ? 'checked' : ''}
+                                        onchange="updateStep(${index}, 'showTyping', this.checked)">
+                                    <label for="typing_${index}">Mostrar "digitando" antes de enviar</label>
+                                </div>
+
+                                <div class="form-checkbox">
+                                    <input type="checkbox" id="wait_${index}" 
+                                        ${step.waitForReply ? 'checked' : ''}
+                                        onchange="updateStep(${index}, 'waitForReply', this.checked)">
+                                    <label for="wait_${index}">⏸️ Aguardar resposta do cliente</label>
+                                </div>
+                                `}
                                     <label class="form-label">Delay antes desta mensagem (segundos)</label>
                                     <input type="number" class="form-input" 
                                         value="${step.delayBefore || ''}"
