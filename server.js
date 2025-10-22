@@ -42,7 +42,7 @@ let funis = new Map();
 let lastSuccessfulInstanceIndex = -1;
 let phraseTriggers = new Map();
 let phraseCooldowns = new Map();
-let manualTriggers = new Map(); // 🆕 NOVO: Frases de disparo manual
+let manualTriggers = new Map();
 
 const LOG_LEVELS = {
     DEBUG: 'DEBUG',
@@ -87,7 +87,6 @@ function addLog(type, message, data = null, level = LOG_LEVELS.INFO) {
     if (data) console.log('  Data:', data);
 }
 
-// Salvar logs periodicamente
 async function saveLogsToFile() {
     try {
         await ensureDataDir();
@@ -218,7 +217,6 @@ async function loadPhrasesFromFile() {
     }
 }
 
-// 🆕 NOVO: Salvar/Carregar Frases de Disparo Manual
 async function saveManualTriggersToFile() {
     try {
         await ensureDataDir();
@@ -307,22 +305,19 @@ async function loadConversationsFromFile() {
     }
 }
 
-// Salvar dados periodicamente
 setInterval(async () => {
     await saveFunnelsToFile();
     await saveConversationsToFile();
     await savePhrasesToFile();
-    await saveManualTriggersToFile(); // 🆕 NOVO
+    await saveManualTriggersToFile();
     await saveLogsToFile();
 }, 30000);
 
 Object.values(defaultFunnels).forEach(funnel => funis.set(funnel.id, funnel));
 
-// ============ MIDDLEWARES ============
 app.use(express.json());
 app.use(express.static('public'));
 
-// ============ FUNÇÕES AUXILIARES ============
 function extractPhoneKey(phone) {
     if (!phone) return '';
     const cleaned = phone.replace(/\D/g, '');
@@ -401,7 +396,6 @@ function validateConversationState(conversation, phoneKey) {
     return true;
 }
 
-// 🆕 ATUALIZADO: Detecção de frase-chave com CONTAINS (mesma ordem)
 function checkPhraseTrigger(phoneKey, messageText) {
     const normalizedMessage = messageText.toLowerCase().trim();
     
@@ -415,7 +409,6 @@ function checkPhraseTrigger(phoneKey, messageText) {
         
         const normalizedPhrase = phrase.toLowerCase().trim();
         
-        // 🆕 MUDANÇA: Agora verifica se a mensagem CONTÉM a frase (não precisa ser idêntica)
         if (normalizedMessage.includes(normalizedPhrase)) {
             const cooldownKey = `${phoneKey}:${phrase}`;
             const lastTrigger = phraseCooldowns.get(cooldownKey);
@@ -444,7 +437,6 @@ function checkPhraseTrigger(phoneKey, messageText) {
     return null;
 }
 
-// 🆕 NOVO: Detecção de frase de disparo manual (quando VOCÊ envia)
 function checkManualTrigger(messageText) {
     const normalizedMessage = messageText.toLowerCase().trim();
     
@@ -475,7 +467,6 @@ function checkManualTrigger(messageText) {
     return null;
 }
 
-// ============ EVOLUTION API ============
 async function sendToEvolution(instanceName, endpoint, payload) {
     const url = EVOLUTION_BASE_URL + endpoint + '/' + instanceName;
     
@@ -515,7 +506,6 @@ async function sendText(remoteJid, text, instanceName) {
     });
 }
 
-// 🆕 ATUALIZADO: Removido parâmetro viewOnce
 async function sendImage(remoteJid, imageUrl, caption, instanceName) {
     return await sendToEvolution(instanceName, '/message/sendMedia', {
         number: remoteJid.replace('@s.whatsapp.net', ''),
@@ -581,7 +571,6 @@ async function sendAudio(remoteJid, audioUrl, instanceName) {
     }
 }
 
-// 🆕 ATUALIZADO: Removido parâmetro viewOnce
 async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFirstMessage = false) {
     let instancesToTry = [...INSTANCES];
     const stickyInstance = stickyInstances.get(phoneKey);
@@ -659,7 +648,6 @@ async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFir
     return { success: false, error: lastError };
 }
 
-// ============ ORQUESTRAÇÃO ============
 async function createPixWaitingConversation(phoneKey, remoteJid, orderCode, customerName, productType, amount) {
     const funnelId = productType === 'CS' ? 'CS_PIX' : 'FB_PIX';
     
@@ -940,7 +928,6 @@ async function advanceConversation(phoneKey, replyText, reason) {
     await sendStep(phoneKey);
 }
 
-// ============ WEBHOOKS ============
 app.post('/webhook/kirvano', async (req, res) => {
     const requestId = Date.now() + Math.random();
     
@@ -1062,8 +1049,42 @@ app.post('/webhook/evolution', async (req, res) => {
         }
         
         if (fromMe) {
-            addLog('EVOLUTION_FROM_ME', 'Mensagem enviada por nós', 
-                { requestId, phoneKey }, LOG_LEVELS.DEBUG);
+            addLog('EVOLUTION_FROM_ME', 'Mensagem enviada por você', 
+                { requestId, phoneKey, messageText }, LOG_LEVELS.DEBUG);
+            
+            const triggeredFunnelId = checkManualTrigger(messageText);
+            
+            if (triggeredFunnelId) {
+                const funnel = funis.get(triggeredFunnelId);
+                
+                if (funnel && funnel.steps && funnel.steps.length > 0) {
+                    addLog('MANUAL_TRIGGER_FUNNEL_START', `Disparando funil ${triggeredFunnelId}`, 
+                        { requestId, phoneKey, instanceName, phrase: messageText }, LOG_LEVELS.INFO);
+                    
+                    if (instanceName && INSTANCES.includes(instanceName)) {
+                        stickyInstances.set(phoneKey, instanceName);
+                        addLog('STICKY_INSTANCE_SET', `Sticky: ${instanceName}`, 
+                            { requestId, phoneKey }, LOG_LEVELS.DEBUG);
+                    }
+                    
+                    await startFunnel(
+                        phoneKey, 
+                        remoteJid, 
+                        triggeredFunnelId, 
+                        'MANUAL_' + Date.now(), 
+                        'Cliente', 
+                        'MANUAL', 
+                        '', 
+                        'manual'
+                    );
+                    
+                    return res.json({ success: true, manualTrigger: true });
+                } else {
+                    addLog('MANUAL_TRIGGER_FUNNEL_EMPTY', `Funil ${triggeredFunnelId} vazio`, 
+                        { requestId, phoneKey }, LOG_LEVELS.ERROR);
+                }
+            }
+            
             return res.json({ success: true });
         }
         
@@ -1147,7 +1168,6 @@ app.post('/webhook/evolution', async (req, res) => {
     }
 });
 
-// ============ API ENDPOINTS ============
 app.get('/api/dashboard', (req, res) => {
     const instanceUsage = {};
     INSTANCES.forEach(inst => instanceUsage[inst] = 0);
@@ -1297,7 +1317,7 @@ app.get('/api/funnels/export', (req, res) => {
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
         res.send(JSON.stringify({
-            version: '5.1',
+            version: '5.3',
             exportDate: new Date().toISOString(),
             totalFunnels: funnelsArray.length,
             funnels: funnelsArray
@@ -1425,7 +1445,6 @@ app.delete('/api/phrases/:phrase', (req, res) => {
     }
 });
 
-// 🆕 NOVO: API para Frases de Disparo Manual
 app.get('/api/manual-triggers', (req, res) => {
     const triggersList = Array.from(manualTriggers.entries()).map(([phrase, data]) => ({
         phrase,
@@ -1548,6 +1567,7 @@ app.get('/api/debug/evolution', async (req, res) => {
         pix_timeouts_active: pixTimeouts.size,
         webhook_locks_active: webhookLocks.size,
         phrase_triggers_count: phraseTriggers.size,
+        manual_triggers_count: manualTriggers.size,
         total_logs: logs.length,
         test_results: []
     };
@@ -1597,29 +1617,18 @@ app.get('/logs.html', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'logs.html'));
 });
 
-// ============ INICIALIZAÇÃO ============
 async function initializeData() {
     console.log('🔄 Carregando dados...');
     await loadFunnelsFromFile();
     await loadConversationsFromFile();
     await loadPhrasesFromFile();
-    await loadManualTriggersFromFile(); // 🆕 NOVO
+    await loadManualTriggersFromFile();
     await loadLogsFromFile();
     console.log('✅ Inicialização concluída');
     console.log('📊 Funis:', funis.size);
     console.log('💬 Conversas:', conversations.size);
     console.log('🔑 Frases:', phraseTriggers.size);
-    console.log('🎯 Frases Manuais:', manualTriggers.size); // 🆕 NOVO
-    console.log('📋 Logs:', logs.length);
-}...');
-    await loadFunnelsFromFile();
-    await loadConversationsFromFile();
-    await loadPhrasesFromFile();
-    await loadLogsFromFile();
-    console.log('✅ Inicialização concluída');
-    console.log('📊 Funis:', funis.size);
-    console.log('💬 Conversas:', conversations.size);
-    console.log('🔑 Frases:', phraseTriggers.size);
+    console.log('🎯 Frases Manuais:', manualTriggers.size);
     console.log('📋 Logs:', logs.length);
 }
 
