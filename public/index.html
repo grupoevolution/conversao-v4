@@ -974,9 +974,44 @@
             </div>
 
             <div class="form-group">
-                <label class="form-label">Intervalo entre envios (segundos):</label>
-                <input type="number" id="campaignInterval" class="form-input" value="5" min="1" max="60">
-                <small style="color: #6b7280;">Recomendado: 5-10 segundos</small>
+                <label class="form-label">⚙️ Configurações de Envio:</label>
+                <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin-top: 8px;">
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-weight: 600; color: #374151; font-size: 14px; display: block; margin-bottom: 6px;">
+                            📊 Limite Diário por Instância:
+                        </label>
+                        <input type="number" id="campaignDailyLimit" class="form-input" value="10" min="1" max="50" style="width: 100px;">
+                        <small style="color: #6b7280; display: block; margin-top: 6px;">
+                            Recomendado: 10 envios/dia (150 total com 15 instâncias)<br>
+                            ⚠️ Valores altos podem causar bloqueio
+                        </small>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #1f2937;">⏱️ Intervalos Automáticos:</strong>
+                        <div style="color: #6b7280; font-size: 14px; margin-top: 4px;">
+                            • Aleatório entre 40 minutos e 2 horas<br>
+                            • Evita padrões e bloqueios
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; font-size: 14px; display: block; margin-bottom: 8px;">
+                            🕐 Horário de Funcionamento (Brasília):
+                        </label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div>
+                                <label style="font-size: 13px; color: #6b7280;">Início:</label>
+                                <input type="number" id="campaignStartHour" class="form-input" value="7" min="0" max="23" style="margin-top: 4px;">
+                            </div>
+                            <div>
+                                <label style="font-size: 13px; color: #6b7280;">Fim:</label>
+                                <input type="number" id="campaignEndHour" class="form-input" value="22" min="0" max="23" style="margin-top: 4px;">
+                            </div>
+                        </div>
+                        <small style="color: #6b7280; display: block; margin-top: 6px;">
+                            Envios apenas neste período (Horário de Brasília)
+                        </small>
+                    </div>
+                </div>
             </div>
 
             <div class="form-group">
@@ -2047,7 +2082,9 @@
             
             // Limpar campos
             document.getElementById('campaignName').value = '';
-            document.getElementById('campaignInterval').value = '5';
+            document.getElementById('campaignDailyLimit').value = '10';
+            document.getElementById('campaignStartHour').value = '7';
+            document.getElementById('campaignEndHour').value = '22';
             document.getElementById('contactsFile').value = '';
             document.getElementById('fileInfo').style.display = 'none';
             currentContacts = [];
@@ -2082,17 +2119,32 @@
         async function createCampaign() {
             const name = document.getElementById('campaignName').value.trim();
             const funnelId = document.getElementById('campaignFunnel').value;
-            const interval = parseInt(document.getElementById('campaignInterval').value);
+            const dailyLimit = parseInt(document.getElementById('campaignDailyLimit').value);
+            const startHour = parseInt(document.getElementById('campaignStartHour').value);
+            const endHour = parseInt(document.getElementById('campaignEndHour').value);
             
             if (!name || !funnelId || currentContacts.length === 0) {
                 alert('Preencha todos os campos e faça upload da lista de contatos!');
                 return;
             }
             
-            if (interval < 1 || interval > 60) {
-                alert('Intervalo deve ser entre 1 e 60 segundos!');
+            if (dailyLimit < 1 || dailyLimit > 50) {
+                alert('Limite diário deve estar entre 1 e 50!');
                 return;
             }
+            
+            if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23) {
+                alert('Horários devem estar entre 0 e 23!');
+                return;
+            }
+            
+            if (startHour >= endHour) {
+                alert('Horário de início deve ser menor que horário de fim!');
+                return;
+            }
+            
+            const totalPerDay = dailyLimit * 15;
+            const estimatedDays = Math.ceil(currentContacts.length / totalPerDay);
             
             try {
                 const response = await fetch('/api/campaigns', {
@@ -2103,7 +2155,9 @@
                         funnelId,
                         contacts: currentContacts,
                         config: {
-                            interval: interval * 1000 // Converter para milissegundos
+                            dailyLimit,
+                            startHour,
+                            endHour
                         }
                     })
                 });
@@ -2111,7 +2165,13 @@
                 const result = await response.json();
                 
                 if (result.success) {
-                    alert(`✅ Campanha "${name}" criada com sucesso!\n\nEnvios iniciados para ${currentContacts.length} contatos.`);
+                    alert(`✅ Campanha "${name}" criada com sucesso!\n\n` +
+                          `📊 Informações:\n` +
+                          `• Total de contatos: ${currentContacts.length}\n` +
+                          `• Envios por dia: ${totalPerDay} (15 instâncias × ${dailyLimit})\n` +
+                          `• Previsão: ~${estimatedDays} dias\n` +
+                          `• Horário: ${startHour}h às ${endHour}h (Brasília)\n` +
+                          `• Intervalos: 40min a 2h (aleatórios)`);
                     closeCampaignModal();
                     loadCampaigns();
                     loadDashboard();
