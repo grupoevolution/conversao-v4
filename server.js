@@ -20,12 +20,13 @@ const CAMPAIGNS_FILE = path.join(__dirname, 'data', 'campaigns.json');
 
 // 🚀 CAMPANHAS - Configurações de proteção anti-ban
 const CAMPAIGN_CONFIG = {
-    MAX_DAILY_SENDS_PER_INSTANCE: 10,  // 10 envios/dia por instância
+    DEFAULT_DAILY_LIMIT: 10,           // Padrão: 10 envios/dia por instância
     MIN_INTERVAL: 40 * 60 * 1000,      // 40 minutos
     MAX_INTERVAL: 120 * 60 * 1000,     // 2 horas
-    DEFAULT_START_HOUR: 7,              // 7h da manhã
-    DEFAULT_END_HOUR: 22,               // 22h da noite
-    MAX_CONSECUTIVE_ERRORS: 3           // Pausa instância após 3 erros seguidos
+    DEFAULT_START_HOUR: 7,             // 7h da manhã
+    DEFAULT_END_HOUR: 22,              // 22h da noite
+    MAX_CONSECUTIVE_ERRORS: 3,         // Pausa instância após 3 erros seguidos
+    TIMEZONE: 'America/Sao_Paulo'      // Horário de Brasília
 };
 
 // Produtos CS e FB
@@ -370,31 +371,33 @@ function getRandomInterval() {
     return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// Verifica se está dentro do horário permitido
+// Verifica se está dentro do horário permitido (Timezone Brasília)
 function isWithinWorkingHours(startHour, endHour) {
     const now = new Date();
-    const currentHour = now.getHours();
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: CAMPAIGN_CONFIG.TIMEZONE }));
+    const currentHour = brasiliaTime.getHours();
     return currentHour >= startHour && currentHour < endHour;
 }
 
-// Calcula próximo horário válido
+// Calcula próximo horário válido (Timezone Brasília)
 function getNextValidTime(startHour, endHour) {
     const now = new Date();
-    const currentHour = now.getHours();
+    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: CAMPAIGN_CONFIG.TIMEZONE }));
+    const currentHour = brasiliaTime.getHours();
     
     // Se está antes do horário, agenda para o startHour de hoje
     if (currentHour < startHour) {
-        const next = new Date(now);
+        const next = new Date(brasiliaTime);
         next.setHours(startHour, 0, 0, 0);
-        return next.getTime() - now.getTime();
+        return next.getTime() - brasiliaTime.getTime();
     }
     
     // Se está depois do horário, agenda para o startHour de amanhã
     if (currentHour >= endHour) {
-        const next = new Date(now);
+        const next = new Date(brasiliaTime);
         next.setDate(next.getDate() + 1);
         next.setHours(startHour, 0, 0, 0);
-        return next.getTime() - now.getTime();
+        return next.getTime() - brasiliaTime.getTime();
     }
     
     // Está dentro do horário
@@ -515,11 +518,14 @@ async function processCampaignInstance(campaignId, instance) {
     }
 
     // Verifica limite diário
-    if (instanceData.sentToday >= CAMPAIGN_CONFIG.MAX_DAILY_SENDS_PER_INSTANCE) {
+    const maxDailyLimit = campaign.config.dailyLimit || CAMPAIGN_CONFIG.DEFAULT_DAILY_LIMIT;
+    
+    if (instanceData.sentToday >= maxDailyLimit) {
         addLog('CAMPAIGN_DAILY_LIMIT', `Limite diário atingido`, {
             campaignId,
             instance,
-            sent: instanceData.sentToday
+            sent: instanceData.sentToday,
+            limit: maxDailyLimit
         }, LOG_LEVELS.INFO);
         
         // Agenda para amanhã
@@ -660,9 +666,11 @@ async function processCampaignInstance(campaignId, instance) {
 
 // Encontra próxima instância disponível (sequencial, pulando pausadas)
 function findNextAvailableInstance(campaignId, currentInstance) {
+    const campaign = campaigns.get(campaignId);
     const instances = campaignInstances.get(campaignId);
-    if (!instances) return null;
+    if (!instances || !campaign) return null;
     
+    const maxDailyLimit = campaign.config.dailyLimit || CAMPAIGN_CONFIG.DEFAULT_DAILY_LIMIT;
     const instancesList = Array.from(instances.keys());
     const currentIndex = instancesList.indexOf(currentInstance);
     
@@ -672,8 +680,7 @@ function findNextAvailableInstance(campaignId, currentInstance) {
         const nextInstance = instancesList[nextIndex];
         const nextData = instances.get(nextInstance);
         
-        if (nextData.status === 'active' && 
-            nextData.sentToday < CAMPAIGN_CONFIG.MAX_DAILY_SENDS_PER_INSTANCE) {
+        if (nextData.status === 'active' && nextData.sentToday < maxDailyLimit) {
             return nextInstance;
         }
     }
@@ -1313,6 +1320,7 @@ app.post('/api/campaigns', async (req, res) => {
                 errors: 0
             },
             config: {
+                dailyLimit: config?.dailyLimit || CAMPAIGN_CONFIG.DEFAULT_DAILY_LIMIT,
                 startHour: config?.startHour || CAMPAIGN_CONFIG.DEFAULT_START_HOUR,
                 endHour: config?.endHour || CAMPAIGN_CONFIG.DEFAULT_END_HOUR
             },
