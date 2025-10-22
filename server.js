@@ -15,6 +15,7 @@ const DATA_FILE = path.join(__dirname, 'data', 'funnels.json');
 const CONVERSATIONS_FILE = path.join(__dirname, 'data', 'conversations.json');
 const PHRASES_FILE = path.join(__dirname, 'data', 'phrases.json');
 const LOGS_FILE = path.join(__dirname, 'data', 'logs.json');
+const MANUAL_TRIGGERS_FILE = path.join(__dirname, 'data', 'manual_triggers.json');
 
 // Produtos CS e FB
 const PRODUCT_MAPPING = {
@@ -41,6 +42,7 @@ let funis = new Map();
 let lastSuccessfulInstanceIndex = -1;
 let phraseTriggers = new Map();
 let phraseCooldowns = new Map();
+let manualTriggers = new Map(); // 🆕 NOVO: Frases de disparo manual
 
 const LOG_LEVELS = {
     DEBUG: 'DEBUG',
@@ -216,6 +218,43 @@ async function loadPhrasesFromFile() {
     }
 }
 
+// 🆕 NOVO: Salvar/Carregar Frases de Disparo Manual
+async function saveManualTriggersToFile() {
+    try {
+        await ensureDataDir();
+        const triggersArray = Array.from(manualTriggers.entries()).map(([phrase, data]) => ({
+            phrase,
+            funnelId: data.funnelId,
+            active: data.active,
+            triggerCount: data.triggerCount
+        }));
+        await fs.writeFile(MANUAL_TRIGGERS_FILE, JSON.stringify(triggersArray, null, 2));
+        addLog('MANUAL_TRIGGERS_SAVE', `Frases manuais salvas: ${triggersArray.length}`, null, LOG_LEVELS.DEBUG);
+    } catch (error) {
+        addLog('MANUAL_TRIGGERS_SAVE_ERROR', `Erro: ${error.message}`, null, LOG_LEVELS.ERROR);
+    }
+}
+
+async function loadManualTriggersFromFile() {
+    try {
+        const data = await fs.readFile(MANUAL_TRIGGERS_FILE, 'utf8');
+        const triggersArray = JSON.parse(data);
+        manualTriggers.clear();
+        triggersArray.forEach(item => {
+            manualTriggers.set(item.phrase, {
+                funnelId: item.funnelId,
+                active: item.active !== false,
+                triggerCount: item.triggerCount || 0
+            });
+        });
+        addLog('MANUAL_TRIGGERS_LOAD', `Frases manuais carregadas: ${manualTriggers.size}`, null, LOG_LEVELS.INFO);
+        return true;
+    } catch (error) {
+        addLog('MANUAL_TRIGGERS_LOAD_ERROR', 'Nenhuma frase manual cadastrada', null, LOG_LEVELS.DEBUG);
+        return false;
+    }
+}
+
 async function saveConversationsToFile() {
     try {
         await ensureDataDir();
@@ -273,6 +312,7 @@ setInterval(async () => {
     await saveFunnelsToFile();
     await saveConversationsToFile();
     await savePhrasesToFile();
+    await saveManualTriggersToFile(); // 🆕 NOVO
     await saveLogsToFile();
 }, 30000);
 
@@ -401,6 +441,37 @@ function checkPhraseTrigger(phoneKey, messageText) {
     
     addLog('PHRASE_NOT_FOUND', `Nenhuma frase correspondente`, 
         { phoneKey, message: normalizedMessage }, LOG_LEVELS.DEBUG);
+    return null;
+}
+
+// 🆕 NOVO: Detecção de frase de disparo manual (quando VOCÊ envia)
+function checkManualTrigger(messageText) {
+    const normalizedMessage = messageText.toLowerCase().trim();
+    
+    addLog('MANUAL_TRIGGER_CHECK', `Verificando frase manual: "${normalizedMessage}"`, 
+        { original: messageText }, LOG_LEVELS.DEBUG);
+    
+    for (const [phrase, data] of manualTriggers.entries()) {
+        if (!data.active) {
+            continue;
+        }
+        
+        const normalizedPhrase = phrase.toLowerCase().trim();
+        
+        if (normalizedMessage.includes(normalizedPhrase)) {
+            addLog('MANUAL_TRIGGER_DETECTED', `Frase manual detectada: "${phrase}"`, 
+                { funnelId: data.funnelId }, LOG_LEVELS.INFO);
+            
+            data.triggerCount = (data.triggerCount || 0) + 1;
+            manualTriggers.set(phrase, data);
+            saveManualTriggersToFile();
+            
+            return data.funnelId;
+        }
+    }
+    
+    addLog('MANUAL_TRIGGER_NOT_FOUND', `Nenhuma frase manual correspondente`, 
+        { message: normalizedMessage }, LOG_LEVELS.DEBUG);
     return null;
 }
 
@@ -1354,6 +1425,88 @@ app.delete('/api/phrases/:phrase', (req, res) => {
     }
 });
 
+// 🆕 NOVO: API para Frases de Disparo Manual
+app.get('/api/manual-triggers', (req, res) => {
+    const triggersList = Array.from(manualTriggers.entries()).map(([phrase, data]) => ({
+        phrase,
+        funnelId: data.funnelId,
+        active: data.active !== false,
+        triggerCount: data.triggerCount || 0
+    }));
+    res.json({ success: true, data: triggersList });
+});
+
+app.post('/api/manual-triggers', (req, res) => {
+    const { phrase, funnelId } = req.body;
+    
+    if (!phrase || !funnelId) {
+        return res.status(400).json({ success: false, error: 'Frase e funil são obrigatórios' });
+    }
+    
+    const normalizedPhrase = phrase.trim();
+    
+    if (manualTriggers.has(normalizedPhrase)) {
+        return res.status(400).json({ success: false, error: 'Frase já cadastrada' });
+    }
+    
+    if (!funis.has(funnelId)) {
+        return res.status(400).json({ success: false, error: 'Funil não encontrado' });
+    }
+    
+    manualTriggers.set(normalizedPhrase, {
+        funnelId,
+        active: true,
+        triggerCount: 0
+    });
+    
+    addLog('MANUAL_TRIGGER_ADDED', `Frase manual cadastrada: "${normalizedPhrase}"`, 
+        { funnelId }, LOG_LEVELS.INFO);
+    saveManualTriggersToFile();
+    
+    res.json({ success: true, message: 'Frase de disparo manual cadastrada com sucesso' });
+});
+
+app.put('/api/manual-triggers/:phrase', (req, res) => {
+    const phrase = decodeURIComponent(req.params.phrase);
+    const { funnelId, active } = req.body;
+    
+    if (!manualTriggers.has(phrase)) {
+        return res.status(404).json({ success: false, error: 'Frase não encontrada' });
+    }
+    
+    const data = manualTriggers.get(phrase);
+    
+    if (funnelId !== undefined) {
+        if (!funis.has(funnelId)) {
+            return res.status(400).json({ success: false, error: 'Funil não encontrado' });
+        }
+        data.funnelId = funnelId;
+    }
+    
+    if (active !== undefined) {
+        data.active = active;
+    }
+    
+    manualTriggers.set(phrase, data);
+    addLog('MANUAL_TRIGGER_UPDATED', `Frase manual atualizada: "${phrase}"`, null, LOG_LEVELS.INFO);
+    saveManualTriggersToFile();
+    
+    res.json({ success: true, message: 'Frase de disparo manual atualizada com sucesso' });
+});
+
+app.delete('/api/manual-triggers/:phrase', (req, res) => {
+    const phrase = decodeURIComponent(req.params.phrase);
+    
+    if (manualTriggers.has(phrase)) {
+        manualTriggers.delete(phrase);
+        addLog('MANUAL_TRIGGER_DELETED', `Frase manual excluída: "${phrase}"`, null, LOG_LEVELS.INFO);
+        saveManualTriggersToFile();
+        res.json({ success: true, message: 'Frase de disparo manual excluída com sucesso' });
+    } else {
+        res.status(404).json({ success: false, error: 'Frase não encontrada' });
+    }
+});
+
 app.get('/api/conversations', (req, res) => {
     const conversationsList = Array.from(conversations.entries()).map(([phoneKey, conv]) => ({
         id: phoneKey,
@@ -1450,6 +1603,18 @@ async function initializeData() {
     await loadFunnelsFromFile();
     await loadConversationsFromFile();
     await loadPhrasesFromFile();
+    await loadManualTriggersFromFile(); // 🆕 NOVO
+    await loadLogsFromFile();
+    console.log('✅ Inicialização concluída');
+    console.log('📊 Funis:', funis.size);
+    console.log('💬 Conversas:', conversations.size);
+    console.log('🔑 Frases:', phraseTriggers.size);
+    console.log('🎯 Frases Manuais:', manualTriggers.size); // 🆕 NOVO
+    console.log('📋 Logs:', logs.length);
+}...');
+    await loadFunnelsFromFile();
+    await loadConversationsFromFile();
+    await loadPhrasesFromFile();
     await loadLogsFromFile();
     console.log('✅ Inicialização concluída');
     console.log('📊 Funis:', funis.size);
@@ -1460,25 +1625,27 @@ async function initializeData() {
 
 app.listen(PORT, async () => {
     console.log('='.repeat(70));
-    console.log('🚀 KIRVANO SYSTEM V5.2 - SISTEMA COMPLETO DE FUNIS');
+    console.log('🚀 KIRVANO SYSTEM V5.3 - SISTEMA COMPLETO DE FUNIS');
     console.log('='.repeat(70));
     console.log('Porta:', PORT);
     console.log('Evolution:', EVOLUTION_BASE_URL);
     console.log('Instâncias:', INSTANCES.length);
     console.log('');
-    console.log('✅ NOVIDADES V5.2:');
-    console.log('  1. ✅ ViewOnce REMOVIDO (não suportado pela Evolution API)');
-    console.log('  2. ✅ Detecção de frases FLEXÍVEL (contém frase na mesma ordem)');
-    console.log('  3. ✅ 15 instâncias (GABY01-GABY15)');
-    console.log('  4. ✅ Sistema de logs completo e exportável');
-    console.log('  5. ✅ Validações extras contra race conditions');
-    console.log('  6. ✅ Editor de funis melhorado');
+    console.log('✅ NOVIDADES V5.3:');
+    console.log('  1. 🆕 FRASES DE DISPARO MANUAL (você envia → dispara funil)');
+    console.log('  2. ✅ ViewOnce REMOVIDO (não suportado pela Evolution API)');
+    console.log('  3. ✅ Detecção de frases FLEXÍVEL (contém frase na mesma ordem)');
+    console.log('  4. ✅ 15 instâncias (GABY01-GABY15)');
+    console.log('  5. ✅ Sistema de logs completo e exportável');
+    console.log('  6. ✅ Validações extras contra race conditions');
     console.log('');
     console.log('📡 Endpoints:');
-    console.log('  POST /webhook/kirvano       - Eventos Kirvano');
-    console.log('  POST /webhook/evolution     - Mensagens WhatsApp');
-    console.log('  GET  /api/logs              - Listar logs (com filtros)');
-    console.log('  GET  /api/logs/export       - Exportar logs (JSON/TXT)');
+    console.log('  POST /webhook/kirvano           - Eventos Kirvano');
+    console.log('  POST /webhook/evolution         - Mensagens WhatsApp');
+    console.log('  GET  /api/manual-triggers       - Listar frases manuais');
+    console.log('  POST /api/manual-triggers       - Criar frase manual');
+    console.log('  PUT  /api/manual-triggers/:id   - Atualizar frase manual');
+    console.log('  DELETE /api/manual-triggers/:id - Deletar frase manual');
     console.log('');
     console.log('🌐 Frontend:');
     console.log('  http://localhost:' + PORT + '           - Dashboard principal');
