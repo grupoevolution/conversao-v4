@@ -1044,6 +1044,25 @@
     </div>
 
     <script>
+        // 🔧 FUNÇÃO AUXILIAR: Tratar requisições fetch com validação de JSON
+        async function safeFetch(url, options = {}) {
+            try {
+                const response = await fetch(url, options);
+                
+                // Verificar se a resposta é JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Servidor retornou resposta inválida. Verifique os logs do servidor.');
+                }
+                
+                const result = await response.json();
+                return result;
+            } catch (error) {
+                console.error('Erro na requisição:', error);
+                throw error;
+            }
+        }
+
         let currentFunnelData = null;
         let editingStepIndex = -1;
         let allFunnels = {};
@@ -1384,13 +1403,11 @@
             }
             
             try {
-                const response = await fetch('/api/funnels', {
+                const result = await safeFetch('/api/funnels', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(currentFunnelData)
                 });
-                
-                const result = await response.json();
                 
                 if (result.success) {
                     alert('✅ Funil salvo com sucesso!');
