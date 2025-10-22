@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kirvano V5.5 - Sistema Completo + Remarketing</title>
+    <title>Kirvano V5.3 - Sistema Completo de Funis</title>
     <style>
         * {
             margin: 0;
@@ -97,80 +97,384 @@
             display: flex;
             background: #f8fafc;
             border-bottom: 1px solid #e5e7eb;
-            overflow-x: auto;
         }
 
-        .tab {
+        .main-tab {
+            flex: 1;
             padding: 16px 24px;
-            cursor: pointer;
+            background: none;
             border: none;
-            background: transparent;
-            font-size: 14px;
-            font-weight: 500;
+            cursor: pointer;
+            font-weight: 600;
             color: #6b7280;
-            transition: all 0.3s;
-            border-bottom: 3px solid transparent;
-            white-space: nowrap;
+            transition: all 0.2s;
         }
 
-        .tab:hover {
-            background: #f1f5f9;
-            color: #1f2937;
-        }
-
-        .tab.active {
-            color: #667eea;
-            border-bottom-color: #667eea;
+        .main-tab.active {
             background: white;
+            color: #667eea;
+            border-bottom: 2px solid #667eea;
         }
 
         .tab-content {
             display: none;
-            padding: 24px;
+            min-height: 600px;
         }
 
         .tab-content.active {
             display: block;
         }
 
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.3s;
+        /* EDITOR DE FUNIS */
+        .funnel-editor {
+            display: flex;
+            height: 600px;
         }
 
-        .btn-primary {
+        .funnel-sidebar {
+            width: 300px;
+            background: #f8fafc;
+            border-right: 1px solid #e5e7eb;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .funnel-selector {
+            margin-bottom: 24px;
+        }
+
+        .funnel-selector label {
+            display: block;
+            font-weight: 600;
+            color: #1f2937;
+            margin-bottom: 8px;
+        }
+
+        .funnel-selector select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            background: white;
+        }
+
+        .block-palette {
+            margin-bottom: 24px;
+        }
+
+        .block-palette h3 {
+            font-size: 16px;
+            color: #1f2937;
+            margin-bottom: 12px;
+        }
+
+        .block-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .block-item:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .block-icon {
+            width: 32px;
+            height: 32px;
+            background: #667eea;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 18px;
+        }
+
+        .funnel-workspace {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        .workspace-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .workspace-actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .current-funnel {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .btn {
             background: linear-gradient(135deg, #667eea, #764ba2);
             color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.2s;
         }
 
-        .btn-primary:hover {
-            transform: translateY(-2px);
+        .btn:hover {
+            transform: translateY(-1px);
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
         }
 
         .btn-success {
             background: linear-gradient(135deg, #10b981, #059669);
-            color: white;
-        }
-
-        .btn-success:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.4);
         }
 
         .btn-danger {
-            background: linear-gradient(135deg, #ef4444, #dc2626);
-            color: white;
+            background: #dc2626;
         }
 
-        .btn-warning {
-            background: linear-gradient(135deg, #f59e0b, #d97706);
+        .btn-export {
+            background: linear-gradient(135deg, #059669, #047857);
+        }
+
+        .btn-import {
+            background: linear-gradient(135deg, #7c3aed, #6d28d9);
+        }
+
+        .btn-move {
+            background: #6b7280;
+            padding: 4px 8px;
+            font-size: 11px;
+        }
+
+        .steps-container {
+            min-height: 400px;
+        }
+
+        .step-card {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .step-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+        }
+
+        .step-card.editing {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+
+        .step-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .step-number {
+            width: 32px;
+            height: 32px;
+            background: #667eea;
             color: white;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .step-type {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .step-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .step-content {
+            margin-left: 40px;
+        }
+
+        .step-preview {
+            background: #f8fafc;
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            color: #4b5563;
+            margin-bottom: 12px;
+        }
+
+        .step-config {
+            display: none;
+        }
+
+        .step-config.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-weight: 500;
+            color: #374151;
+            margin-bottom: 6px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .form-textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+
+        .form-checkbox {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin: 12px 0;
+        }
+
+        .connector {
+            display: flex;
+            justify-content: center;
+            margin: -8px 0;
+        }
+
+        .connector-line {
+            width: 2px;
+            height: 30px;
+            background: #667eea;
+            position: relative;
+        }
+
+        .connector-arrow {
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 4px solid transparent;
+            border-right: 4px solid transparent;
+            border-top: 8px solid #667eea;
+        }
+
+        .empty-workspace {
+            text-align: center;
+            padding: 60px 20px;
+            color: #6b7280;
+        }
+
+        .empty-workspace h3 {
+            color: #374151;
+            margin-bottom: 8px;
+        }
+
+        /* FRASES-CHAVE */
+        .phrases-container {
+            padding: 24px;
+        }
+
+        .phrases-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 24px;
+        }
+
+        .phrase-card {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.2s;
+        }
+
+        .phrase-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+        }
+
+        .phrase-card.inactive {
+            opacity: 0.6;
+            background: #f9fafb;
+        }
+
+        .phrase-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .phrase-text {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .phrase-info {
+            display: flex;
+            gap: 16px;
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .phrase-actions {
+            display: flex;
+            gap: 8px;
         }
 
         .modal {
@@ -180,7 +484,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.7);
+            background: rgba(0, 0, 0, 0.5);
             z-index: 1000;
             align-items: center;
             justify-content: center;
@@ -194,134 +498,69 @@
             background: white;
             border-radius: 16px;
             padding: 32px;
-            max-width: 600px;
+            max-width: 500px;
             width: 90%;
-            max-height: 90vh;
+            max-height: 80vh;
             overflow-y: auto;
         }
 
         .modal-header {
             font-size: 24px;
-            font-weight: 700;
+            font-weight: 600;
             color: #1f2937;
             margin-bottom: 24px;
         }
 
-        .form-group {
-            margin-bottom: 20px;
+        .modal-actions {
+            display: flex;
+            gap: 12px;
+            margin-top: 24px;
         }
 
-        .form-label {
-            display: block;
-            font-size: 14px;
-            font-weight: 500;
-            color: #374151;
-            margin-bottom: 8px;
+        /* CONVERSAS */
+        .events-container {
+            padding: 24px;
         }
 
-        .form-input, .form-select, .form-textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e5e7eb;
-            border-radius: 8px;
-            font-size: 14px;
-            transition: all 0.3s;
-        }
-
-        .form-input:focus, .form-select:focus, .form-textarea:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-
-        .form-textarea {
-            resize: vertical;
-            min-height: 100px;
-        }
-
-        .file-upload {
-            border: 2px dashed #e5e7eb;
-            border-radius: 8px;
-            padding: 32px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .file-upload:hover {
-            border-color: #667eea;
-            background: #f8fafc;
-        }
-
-        .file-upload input {
-            display: none;
-        }
-
-        .table {
+        .events-table {
             width: 100%;
             border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
 
-        .table th {
-            background: #f8fafc;
+        .events-table th,
+        .events-table td {
             padding: 12px;
             text-align: left;
-            font-size: 12px;
-            font-weight: 600;
-            color: #6b7280;
-            text-transform: uppercase;
-        }
-
-        .table td {
-            padding: 12px;
             border-bottom: 1px solid #f3f4f6;
-            font-size: 14px;
         }
 
-        .table tr:hover {
-            background: #f9fafb;
+        .events-table th {
+            background: #f8fafc;
+            font-weight: 600;
+            color: #374151;
+            font-size: 14px;
         }
 
         .badge {
             display: inline-block;
-            padding: 4px 12px;
-            border-radius: 12px;
+            padding: 4px 8px;
+            border-radius: 4px;
             font-size: 12px;
-            font-weight: 600;
+            font-weight: 500;
         }
 
-        .badge-success {
-            background: #d1fae5;
-            color: #065f46;
-        }
+        .badge-success { background: #d1fae5; color: #065f46; }
+        .badge-warning { background: #fef3c7; color: #92400e; }
+        .badge-info { background: #dbeafe; color: #1e40af; }
+        .badge-danger { background: #fecaca; color: #991b1b; }
+        .badge-secondary { background: #f3f4f6; color: #374151; }
+        .badge-purple { background: #ede9fe; color: #6d28d9; }
 
-        .badge-warning {
-            background: #fef3c7;
-            color: #92400e;
-        }
-
-        .badge-error {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .badge-info {
-            background: #dbeafe;
-            color: #1e40af;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 60px 20px;
-            color: #6b7280;
-        }
-
-        .empty-state h3 {
-            font-size: 20px;
-            margin-bottom: 8px;
-            color: #374151;
-        }
-
+        /* CAMPANHAS */
         .campaign-card {
             background: white;
             border: 2px solid #e5e7eb;
@@ -396,126 +635,235 @@
             padding: 6px 12px;
             font-size: 12px;
         }
+
+        .file-upload {
+            border: 2px dashed #e5e7eb;
+            border-radius: 8px;
+            padding: 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+            background: #f8fafc;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
+        @media (max-width: 768px) {
+            .funnel-editor {
+                flex-direction: column;
+                height: auto;
+            }
+            
+            .funnel-sidebar {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid #e5e7eb;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- HEADER -->
         <div class="header">
-            <h1>
-                Sistema de Funis Kirvano
-                <span class="version-badge">V5.5 - Remarketing</span>
-            </h1>
-            <p>Sistema completo de automação com remarketing em massa</p>
+            <h1>Kirvano - Sistema Completo de Funis <span class="version-badge">v5.3</span></h1>
+            <p>Sistema unificado: Funis Kirvano + Funis por Frase-Chave + Disparo Manual | 15 Instâncias Ativas</p>
             
             <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-value" id="statsConversations">0</div>
+                <div class="stat-card highlight">
+                    <div class="stat-value" id="statsConversations">-</div>
                     <div class="stat-label">Conversas Ativas</div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-value" id="statsPix">0</div>
+                <div class="stat-card highlight">
+                    <div class="stat-value" id="statsPix">-</div>
                     <div class="stat-label">PIX Pendentes</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-value" id="statsFunnels">0</div>
-                    <div class="stat-label">Funis Cadastrados</div>
+                    <div class="stat-value" id="statsFunnels">4</div>
+                    <div class="stat-label">Funis Totais</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-value" id="statsPhrases">0</div>
-                    <div class="stat-label">Frases Ativas</div>
+                    <div class="stat-label">Frases-Chave</div>
                 </div>
-                <div class="stat-card highlight">
-                    <div class="stat-value" id="statsCampaigns">0</div>
-                    <div class="stat-label">Campanhas Ativas</div>
+                <div class="stat-card">
+                    <div class="stat-value" id="statsInstances">15</div>
+                    <div class="stat-label">Instâncias</div>
                 </div>
+            </div>
+
+            <div class="button-group" style="display: flex; gap: 12px; margin-top: 16px;">
+                <a href="/logs.html" class="btn btn-export" style="text-decoration: none;">📋 Ver Logs do Sistema</a>
+                <a href="/teste.html" class="btn btn-import" style="text-decoration: none;">🧪 Simulador de Testes</a>
             </div>
         </div>
 
-        <!-- MAIN CONTENT -->
         <div class="main-content">
-            <!-- TABS -->
             <div class="main-tabs">
-                <button class="tab active" onclick="switchTab('dashboard')">Dashboard</button>
-                <button class="tab" onclick="switchTab('funnels')">Funis</button>
-                <button class="tab" onclick="switchTab('phrases')">Frases-Chave</button>
-                <button class="tab" onclick="switchTab('manual')">Frases Manuais</button>
-                <button class="tab" onclick="switchTab('campaigns')">🚀 Campanhas</button>
-                <button class="tab" onclick="switchTab('conversations')">Conversas</button>
+                <button class="main-tab active" onclick="switchMainTab('editor')">Editor de Funis</button>
+                <button class="main-tab" onclick="switchMainTab('phrases')">Funis por Frase</button>
+                <button class="main-tab" onclick="switchMainTab('campaigns')">🚀 Campanhas</button>
+                <button class="main-tab" onclick="switchMainTab('events')">Conversas</button>
             </div>
 
-            <!-- DASHBOARD TAB -->
-            <div id="dashboard" class="tab-content active">
-                <h2>Bem-vindo ao Sistema de Funis</h2>
-                <p style="color: #6b7280; margin-top: 12px;">
-                    Use as abas acima para navegar entre as funcionalidades.
-                </p>
-            </div>
+            <!-- EDITOR DE FUNIS -->
+            <div id="editor" class="tab-content active">
+                <div class="funnel-editor">
+                    <div class="funnel-sidebar">
+                        <div class="funnel-selector">
+                            <label>Selecione o Funil:</label>
+                            <select id="funnelSelect" onchange="loadFunnelEditor()">
+                                <option value="">-- Selecione --</option>
+                                <optgroup label="Funis Kirvano (CS/FB)">
+                                    <option value="CS_APROVADA">CS - Compra Aprovada</option>
+                                    <option value="CS_PIX">CS - PIX Pendente</option>
+                                    <option value="FB_APROVADA">FB - Compra Aprovada</option>
+                                    <option value="FB_PIX">FB - PIX Pendente</option>
+                                </optgroup>
+                                <optgroup label="Funis por Frase" id="phraseFunnelsGroup">
+                                </optgroup>
+                            </select>
+                            <button class="btn btn-success" style="width: 100%; margin-top: 12px;" onclick="openCreateFunnelModal()">+ Novo Funil por Frase</button>
+                        </div>
 
-            <!-- FUNIS TAB -->
-            <div id="funnels" class="tab-content">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h2>Gerenciar Funis</h2>
-                    <button class="btn btn-success" onclick="openCreateFunnelModal()">+ Criar Funil</button>
-                </div>
-                <div id="funnelsContainer">
-                    <div class="empty-state">
-                        <h3>Carregando funis...</h3>
+                        <div class="block-palette">
+                            <h3>Adicionar Blocos:</h3>
+                            
+                            <div class="block-item" onclick="addBlock('text')">
+                                <div class="block-icon">T</div>
+                                <div>
+                                    <div style="font-weight: 600;">Texto</div>
+                                    <div style="font-size: 12px; color: #6b7280;">Mensagem de texto</div>
+                                </div>
+                            </div>
+                            
+                            <div class="block-item" onclick="addBlock('image')">
+                                <div class="block-icon">📷</div>
+                                <div>
+                                    <div style="font-weight: 600;">Imagem</div>
+                                    <div style="font-size: 12px; color: #6b7280;">Com legenda opcional</div>
+                                </div>
+                            </div>
+                            
+                            <div class="block-item" onclick="addBlock('video')">
+                                <div class="block-icon">🎥</div>
+                                <div>
+                                    <div style="font-weight: 600;">Vídeo</div>
+                                    <div style="font-size: 12px; color: #6b7280;">Com legenda opcional</div>
+                                </div>
+                            </div>
+                            
+                            <div class="block-item" onclick="addBlock('audio')">
+                                <div class="block-icon">🎵</div>
+                                <div>
+                                    <div style="font-weight: 600;">Áudio</div>
+                                    <div style="font-size: 12px; color: #6b7280;">Mensagem de voz</div>
+                                </div>
+                            </div>
+                            
+                            <div class="block-item" onclick="addBlock('delay')">
+                                <div class="block-icon">⏰</div>
+                                <div>
+                                    <div style="font-weight: 600;">Delay</div>
+                                    <div style="font-size: 12px; color: #6b7280;">Pausa entre mensagens</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="funnel-workspace">
+                        <div class="workspace-header">
+                            <div class="current-funnel" id="currentFunnelName">Selecione um funil</div>
+                            <div class="workspace-actions">
+                                <button class="btn btn-export" onclick="exportFunnels()">💾 Export</button>
+                                <button class="btn btn-import" onclick="importFunnels()">📤 Import</button>
+                                <button class="btn" onclick="saveFunnel()">Salvar Funil</button>
+                            </div>
+                        </div>
+                        
+                        <div class="steps-container" id="stepsContainer">
+                            <div class="empty-workspace">
+                                <h3>Selecione um funil</h3>
+                                <p>Escolha um funil na barra lateral para começar</p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- FRASES-CHAVE TAB -->
+            <!-- FUNIS POR FRASE -->
             <div id="phrases" class="tab-content">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h2>Frases-Chave Automáticas</h2>
-                    <button class="btn btn-success" onclick="openPhraseModal()">+ Adicionar Frase</button>
-                </div>
-                <div id="phrasesContainer">
-                    <div class="empty-state">
-                        <h3>Nenhuma frase cadastrada</h3>
-                        <p>Clique em "Adicionar Frase" para começar</p>
+                <div class="phrases-container">
+                    <div class="phrases-header">
+                        <h2>Funis Ativados por Frase-Chave (Cliente → Sistema)</h2>
+                        <button class="btn btn-success" onclick="openPhraseModal()">+ Adicionar Frase</button>
+                    </div>
+                    
+                    <div id="phrasesListContainer">
+                        <div class="empty-workspace">
+                            <h3>Nenhuma frase cadastrada</h3>
+                            <p>Clique em "Adicionar Frase" para começar</p>
+                        </div>
+                    </div>
+
+                    <hr style="margin: 40px 0; border: none; border-top: 2px solid #e5e7eb;">
+
+                    <!-- 🆕 NOVO: Frases de Disparo Manual -->
+                    <div class="phrases-header">
+                        <h2>🎯 Frases de Disparo Manual (Você → Cliente)</h2>
+                        <button class="btn btn-success" onclick="openManualTriggerModal()">+ Adicionar Frase de Disparo</button>
+                    </div>
+
+                    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+                        <p style="color: #92400e; margin: 0; font-size: 14px;">
+                            <strong>💡 Como funciona:</strong> Quando VOCÊ enviar uma dessas frases para um cliente no WhatsApp, o sistema automaticamente dispara o funil configurado. Exemplo: você envia "oiie bb" e o funil começa.
+                        </p>
+                    </div>
+                    
+                    <div id="manualTriggersListContainer">
+                        <div class="empty-workspace">
+                            <h3>Nenhuma frase de disparo cadastrada</h3>
+                            <p>Clique em "Adicionar Frase de Disparo" para começar</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- FRASES MANUAIS TAB -->
-            <div id="manual" class="tab-content">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h2>Frases de Disparo Manual</h2>
-                    <button class="btn btn-success" onclick="openManualTriggerModal()">+ Adicionar Frase Manual</button>
-                </div>
-                <div id="manualTriggersContainer">
-                    <div class="empty-state">
-                        <h3>Nenhuma frase manual cadastrada</h3>
-                        <p>Frases manuais são disparadas quando VOCÊ envia a mensagem</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- CAMPANHAS TAB -->
+            <!-- 🚀 CAMPANHAS -->
             <div id="campaigns" class="tab-content">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                    <h2>🚀 Campanhas de Remarketing</h2>
-                    <button class="btn btn-success" onclick="openCampaignModal()">+ Nova Campanha</button>
-                </div>
-                <div id="campaignsContainer">
-                    <div class="empty-state">
-                        <h3>Nenhuma campanha ativa</h3>
-                        <p>Crie uma campanha para enviar funis em massa</p>
+                <div class="events-container">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <h2>🚀 Campanhas de Remarketing</h2>
+                        <button class="btn btn-success" onclick="openCampaignModal()">+ Nova Campanha</button>
+                    </div>
+                    <div id="campaignsContainer">
+                        <div class="empty-workspace">
+                            <h3>Nenhuma campanha ativa</h3>
+                            <p>Crie uma campanha para enviar funis em massa</p>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            <!-- CONVERSAS TAB -->
-            <div id="conversations" class="tab-content">
-                <h2 style="margin-bottom: 20px;">Conversas e Envios</h2>
-                <div style="overflow-x: auto;">
-                    <table class="table">
+            <!-- CONVERSAS -->
+            <div id="events" class="tab-content">
+                <div class="events-container">
+                    <h2 style="margin-bottom: 20px;">Conversas e Envios</h2>
+                    <table class="events-table">
                         <thead>
                             <tr>
                                 <th>Cliente</th>
                                 <th>Telefone</th>
+                                <th>Chave</th>
                                 <th>Produto</th>
                                 <th>Funil</th>
                                 <th>Passo</th>
@@ -525,9 +873,9 @@
                                 <th>Data</th>
                             </tr>
                         </thead>
-                        <tbody id="conversationsTableBody">
+                        <tbody id="eventsTableBody">
                             <tr>
-                                <td colspan="9" style="text-align: center; padding: 40px; color: #6b7280;">
+                                <td colspan="10" style="text-align: center; padding: 40px; color: #6b7280;">
                                     Carregando conversas...
                                 </td>
                             </tr>
@@ -538,67 +886,80 @@
         </div>
     </div>
 
-    <!-- MODAL: CRIAR FUNIL -->
-    <div id="createFunnelModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">Criar Novo Funil</div>
-            <div class="form-group">
-                <label class="form-label">Nome do Funil:</label>
-                <input type="text" id="newFunnelName" class="form-input" placeholder="Ex: Funil Instagram">
-            </div>
-            <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn" onclick="closeCreateFunnelModal()" style="background: #e5e7eb; color: #374151;">Cancelar</button>
-                <button class="btn btn-success" onclick="createNewFunnel()">Criar Funil</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- MODAL: ADICIONAR FRASE-CHAVE -->
+    <!-- MODAL ADICIONAR/EDITAR FRASE -->
     <div id="phraseModal" class="modal">
         <div class="modal-content">
-            <div class="modal-header">Adicionar Frase-Chave</div>
+            <div class="modal-header" id="modalTitle">Adicionar Frase-Chave</div>
+            
             <div class="form-group">
                 <label class="form-label">Frase que ativa o funil:</label>
                 <input type="text" id="modalPhrase" class="form-input" placeholder="Ex: oi gaby vim pelo insta">
+                <small style="color: #6b7280;">A mensagem do cliente deve CONTER essa frase (na mesma ordem) para disparar o funil</small>
             </div>
+            
             <div class="form-group">
-                <label class="form-label">Funil a ser disparado:</label>
-                <select id="modalPhraseFunnel" class="form-select">
-                    <option value="">Selecione um funil...</option>
+                <label class="form-label">Funil associado:</label>
+                <select id="modalFunnel" class="form-input">
+                    <option value="">-- Selecione um funil --</option>
                 </select>
+                <small style="color: #6b7280;">Crie primeiro o funil no Editor antes de associá-lo</small>
             </div>
-            <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn" onclick="closePhraseModal()" style="background: #e5e7eb; color: #374151;">Cancelar</button>
-                <button class="btn btn-success" onclick="savePhrase()">Salvar</button>
+            
+            <div class="modal-actions">
+                <button class="btn" style="flex: 1;" onclick="closePhraseModal()">Cancelar</button>
+                <button class="btn btn-success" style="flex: 1;" onclick="savePhraseModal()">Salvar</button>
             </div>
         </div>
     </div>
 
-    <!-- MODAL: ADICIONAR FRASE MANUAL -->
+    <!-- MODAL CRIAR NOVO FUNIL -->
+    <div id="createFunnelModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">Criar Novo Funil por Frase</div>
+            
+            <div class="form-group">
+                <label class="form-label">Nome do Funil:</label>
+                <input type="text" id="newFunnelName" class="form-input" placeholder="Ex: Anúncio Facebook">
+                <small style="color: #6b7280;">Escolha um nome descritivo para identificar o funil</small>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn" style="flex: 1;" onclick="closeCreateFunnelModal()">Cancelar</button>
+                <button class="btn btn-success" style="flex: 1;" onclick="createNewFunnel()">Criar Funil</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 🆕 NOVO: MODAL ADICIONAR/EDITAR FRASE DE DISPARO MANUAL -->
     <div id="manualTriggerModal" class="modal">
         <div class="modal-content">
-            <div class="modal-header">Adicionar Frase de Disparo Manual</div>
+            <div class="modal-header" id="manualModalTitle">Adicionar Frase de Disparo Manual</div>
+            
             <div class="form-group">
-                <label class="form-label">Frase que você vai enviar:</label>
-                <input type="text" id="modalManualPhrase" class="form-input" placeholder="Ex: enviar material">
+                <label class="form-label">Frase que VOCÊ vai enviar:</label>
+                <input type="text" id="manualModalPhrase" class="form-input" placeholder="Ex: oiie bb">
+                <small style="color: #6b7280;">Quando você enviar esta frase para um cliente, o funil será disparado automaticamente</small>
             </div>
+            
             <div class="form-group">
-                <label class="form-label">Funil a ser disparado:</label>
-                <select id="modalManualFunnel" class="form-select">
-                    <option value="">Selecione um funil...</option>
+                <label class="form-label">Funil a disparar:</label>
+                <select id="manualModalFunnel" class="form-input">
+                    <option value="">-- Selecione um funil --</option>
                 </select>
+                <small style="color: #6b7280;">Escolha qual funil será enviado quando você usar esta frase</small>
             </div>
-            <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn" onclick="closeManualTriggerModal()" style="background: #e5e7eb; color: #374151;">Cancelar</button>
-                <button class="btn btn-success" onclick="saveManualTrigger()">Salvar</button>
+            
+            <div class="modal-actions">
+                <button class="btn" style="flex: 1;" onclick="closeManualTriggerModal()">Cancelar</button>
+                <button class="btn btn-success" style="flex: 1;" onclick="saveManualTriggerModal()">Salvar</button>
             </div>
         </div>
     </div>
 
-    <!-- MODAL: CRIAR CAMPANHA -->
+    <!-- 🚀 NOVO: MODAL CRIAR CAMPANHA -->
     <div id="campaignModal" class="modal">
         <div class="modal-content">
-            <div class="modal-header">🚀 Criar Nova Campanha</div>
+            <div class="modal-header">🚀 Criar Nova Campanha de Remarketing</div>
             
             <div class="form-group">
                 <label class="form-label">Nome da Campanha:</label>
@@ -607,8 +968,8 @@
 
             <div class="form-group">
                 <label class="form-label">Funil a ser enviado:</label>
-                <select id="campaignFunnel" class="form-select">
-                    <option value="">Selecione um funil...</option>
+                <select id="campaignFunnel" class="form-input">
+                    <option value="">-- Selecione um funil --</option>
                 </select>
             </div>
 
@@ -639,39 +1000,895 @@
                     </div>
                 </div>
             </div>
-
-            <div style="display: flex; gap: 12px; justify-content: flex-end;">
-                <button class="btn" onclick="closeCampaignModal()" style="background: #e5e7eb; color: #374151;">Cancelar</button>
-                <button class="btn btn-success" onclick="createCampaign()">Criar e Iniciar</button>
+            
+            <div class="modal-actions">
+                <button class="btn" style="flex: 1;" onclick="closeCampaignModal()">Cancelar</button>
+                <button class="btn btn-success" style="flex: 1;" onclick="createCampaign()">Criar e Iniciar</button>
             </div>
         </div>
     </div>
 
     <script>
-        let currentContacts = [];
+        let currentFunnelData = null;
+        let editingStepIndex = -1;
+        let allFunnels = {};
+        let allPhrases = [];
+        let editingPhrase = null;
+        let allManualTriggers = []; // 🆕 NOVO
+        let editingManualTrigger = null; // 🆕 NOVO
+        let currentContacts = []; // 🚀 CAMPANHAS
 
-        // ============ NAVEGAÇÃO ============
-        function switchTab(tabName) {
-            // Remove active de todos
-            document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
+        // NAVEGAÇÃO
+        function switchMainTab(tabName) {
+            document.querySelectorAll('.main-tab').forEach(tab => tab.classList.remove('active'));
             document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
-            // Ativa o selecionado
             event.target.classList.add('active');
             document.getElementById(tabName).classList.add('active');
-
-            // Carrega dados da aba
-            if (tabName === 'funnels') loadAllFunnels();
-            if (tabName === 'phrases') loadPhrases();
-            if (tabName === 'manual') loadManualTriggers();
-            if (tabName === 'campaigns') loadCampaigns();
-            if (tabName === 'conversations') loadConversations();
+            
+            if (tabName === 'events') {
+                loadEvents();
+            } else if (tabName === 'phrases') {
+                loadPhrases();
+                loadManualTriggers(); // 🆕 NOVO
+            } else if (tabName === 'campaigns') {
+                loadCampaigns(); // 🚀 CAMPANHAS
+            }
         }
 
-        // ============ DASHBOARD ============
+        // EDITOR DE FUNIS
+        async function loadAllFunnels() {
+            try {
+                const response = await fetch('/api/funnels');
+                const result = await response.json();
+                if (result.success) {
+                    allFunnels = {};
+                    result.data.forEach(funnel => {
+                        allFunnels[funnel.id] = funnel;
+                    });
+                    updateFunnelSelect();
+                }
+            } catch (error) {
+                console.error('Erro ao carregar funis:', error);
+            }
+        }
+
+        function updateFunnelSelect() {
+            const phraseFunnelsGroup = document.getElementById('phraseFunnelsGroup');
+            phraseFunnelsGroup.innerHTML = '';
+            
+            Object.values(allFunnels).forEach(funnel => {
+                if (funnel.id.startsWith('PHRASE_')) {
+                    const option = document.createElement('option');
+                    option.value = funnel.id;
+                    option.textContent = funnel.name;
+                    phraseFunnelsGroup.appendChild(option);
+                }
+            });
+            
+            const modalFunnel = document.getElementById('modalFunnel');
+            const currentValue = modalFunnel.value;
+            modalFunnel.innerHTML = '<option value="">-- Selecione um funil --</option>';
+            
+            Object.values(allFunnels).forEach(funnel => {
+                if (funnel.id.startsWith('PHRASE_')) {
+                    const option = document.createElement('option');
+                    option.value = funnel.id;
+                    option.textContent = funnel.name;
+                    modalFunnel.appendChild(option);
+                }
+            });
+            
+            if (currentValue) {
+                modalFunnel.value = currentValue;
+            }
+
+            // 🆕 NOVO: Atualizar dropdown de funis no modal de disparo manual
+            const manualModalFunnel = document.getElementById('manualModalFunnel');
+            const currentManualValue = manualModalFunnel.value;
+            manualModalFunnel.innerHTML = '<option value="">-- Selecione um funil --</option>';
+            
+            Object.values(allFunnels).forEach(funnel => {
+                if (funnel.id.startsWith('PHRASE_') || funnel.id.startsWith('CS_') || funnel.id.startsWith('FB_')) {
+                    const option = document.createElement('option');
+                    option.value = funnel.id;
+                    option.textContent = funnel.name;
+                    manualModalFunnel.appendChild(option);
+                }
+            });
+            
+            if (currentManualValue) {
+                manualModalFunnel.value = currentManualValue;
+            }
+        }
+
+        function loadFunnelEditor() {
+            const funnelId = document.getElementById('funnelSelect').value;
+            if (!funnelId) {
+                document.getElementById('stepsContainer').innerHTML = `
+                    <div class="empty-workspace">
+                        <h3>Selecione um funil</h3>
+                        <p>Escolha um funil na barra lateral para começar</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            currentFunnelData = allFunnels[funnelId];
+            if (currentFunnelData) {
+                document.getElementById('currentFunnelName').textContent = currentFunnelData.name;
+                renderSteps();
+            }
+        }
+
+        function addBlock(type) {
+            if (!currentFunnelData) {
+                alert('Selecione um funil primeiro!');
+                return;
+            }
+            
+            const newStep = {
+                id: 'step_' + Date.now(),
+                type: type,
+                text: '',
+                mediaUrl: '',
+                delayBefore: 0,
+                showTyping: false,
+                waitForReply: false
+            };
+            
+            if (type === 'delay') {
+                newStep.delaySeconds = 10;
+            }
+            
+            currentFunnelData.steps.push(newStep);
+            renderSteps();
+        }
+
+        function removeStep(index) {
+            if (!currentFunnelData) return;
+            if (confirm('Excluir este passo?')) {
+                currentFunnelData.steps.splice(index, 1);
+                renderSteps();
+            }
+        }
+
+        function moveStepUp(index) {
+            if (!currentFunnelData || index === 0) return;
+            const steps = currentFunnelData.steps;
+            [steps[index - 1], steps[index]] = [steps[index], steps[index - 1]];
+            renderSteps();
+        }
+
+        function moveStepDown(index) {
+            if (!currentFunnelData || index === currentFunnelData.steps.length - 1) return;
+            const steps = currentFunnelData.steps;
+            [steps[index], steps[index + 1]] = [steps[index + 1], steps[index]];
+            renderSteps();
+        }
+
+        function editStep(index) {
+            editingStepIndex = editingStepIndex === index ? -1 : index;
+            renderSteps();
+        }
+
+        function updateStep(index, field, value) {
+            if (!currentFunnelData.steps[index]) return;
+            currentFunnelData.steps[index][field] = value;
+        }
+
+        function getStepIcon(type) {
+            const icons = {
+                'text': 'T',
+                'image': '📷',
+                'video': '🎥',
+                'audio': '🎵',
+                'delay': '⏰'
+            };
+            return icons[type] || 'T';
+        }
+
+        function getStepTypeName(type) {
+            const names = {
+                'text': 'Texto',
+                'image': 'Imagem',
+                'video': 'Vídeo',
+                'audio': 'Áudio',
+                'delay': 'Delay'
+            };
+            return names[type] || 'Mensagem';
+        }
+
+        function renderSteps() {
+            const container = document.getElementById('stepsContainer');
+            
+            if (!currentFunnelData || currentFunnelData.steps.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-workspace">
+                        <h3>Funil vazio</h3>
+                        <p>Adicione blocos da barra lateral para construir seu funil</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            currentFunnelData.steps.forEach((step, index) => {
+                const isEditing = editingStepIndex === index;
+                const stepIcon = getStepIcon(step.type);
+                const stepTypeName = getStepTypeName(step.type);
+                
+                html += `
+                    <div class="step-card ${isEditing ? 'editing' : ''}">
+                        <div class="step-header">
+                            <div style="display: flex; align-items: center; gap: 12px;">
+                                <div class="step-number">${index + 1}</div>
+                                <div class="step-type">
+                                    <span>${stepIcon}</span>
+                                    <span>${stepTypeName}</span>
+                                </div>
+                            </div>
+                            <div class="step-actions">
+                                ${index > 0 ? `<button class="btn btn-small btn-move" onclick="moveStepUp(${index})">↑</button>` : ''}
+                                ${index < currentFunnelData.steps.length - 1 ? `<button class="btn btn-small btn-move" onclick="moveStepDown(${index})">↓</button>` : ''}
+                                <button class="btn btn-small" onclick="editStep(${index})">
+                                    ${isEditing ? '💾 Salvar' : '✏️ Editar'}
+                                </button>
+                                <button class="btn btn-small btn-danger" onclick="removeStep(${index})">🗑️</button>
+                            </div>
+                        </div>
+                        
+                        <div class="step-content">
+                            <div class="step-preview" style="display: ${isEditing ? 'none' : 'block'}">
+                                ${step.type === 'delay' ? `
+                                    <span style="color: #667eea;">⏰ Aguardar ${step.delaySeconds || 0} segundos</span>
+                                ` : `
+                                    ${step.delayBefore ? `<span style="color: #f59e0b;">⏰ Delay: ${step.delayBefore}s</span><br>` : ''}
+                                    ${step.showTyping ? '<span style="color: #667eea;">💬 Mostrar "digitando"</span><br>' : ''}
+                                    ${step.text ? `<strong>Texto:</strong> ${step.text.substring(0, 100)}${step.text.length > 100 ? '...' : ''}` : ''}
+                                    ${step.mediaUrl ? `<br><strong>Mídia:</strong> ${step.mediaUrl.substring(0, 50)}...` : ''}
+                                    ${step.waitForReply ? '<br><span style="color: #dc2626;">⏸️ Aguardar resposta</span>' : ''}
+                                `}
+                            </div>
+                            
+                            <div class="step-config ${isEditing ? 'active' : ''}">
+                                ${step.type === 'delay' ? `
+                                <div class="form-group">
+                                    <label class="form-label">Tempo de Delay (segundos)</label>
+                                    <input type="number" class="form-input" 
+                                        value="${step.delaySeconds || ''}"
+                                        oninput="updateStep(${index}, 'delaySeconds', this.value)">
+                                </div>
+                                ` : `
+                                <div class="form-group">
+                                    <label class="form-label">Texto da Mensagem ${step.type !== 'text' ? '(Legenda - Opcional)' : ''}</label>
+                                    <textarea class="form-input form-textarea" 
+                                        placeholder="Digite o texto..."
+                                        oninput="updateStep(${index}, 'text', this.value)">${step.text || ''}</textarea>
+                                </div>
+                                
+                                ${step.type !== 'text' ? `
+                                <div class="form-group">
+                                    <label class="form-label">URL da Mídia</label>
+                                    <input type="url" class="form-input" 
+                                        placeholder="https://exemplo.com/arquivo.${step.type === 'audio' ? 'mp3' : step.type === 'video' ? 'mp4' : 'jpg'}"
+                                        value="${step.mediaUrl || ''}"
+                                        oninput="updateStep(${index}, 'mediaUrl', this.value)">
+                                </div>
+                                ` : ''}
+                                
+                                <div class="form-group">
+                                    <label class="form-label">Delay antes desta mensagem (segundos)</label>
+                                    <input type="number" class="form-input" 
+                                        value="${step.delayBefore || ''}"
+                                        oninput="updateStep(${index}, 'delayBefore', this.value)">
+                                </div>
+                                
+                                <div class="form-checkbox">
+                                    <input type="checkbox" id="typing_${index}" 
+                                        ${step.showTyping ? 'checked' : ''}
+                                        onchange="updateStep(${index}, 'showTyping', this.checked)">
+                                    <label for="typing_${index}">Mostrar "digitando" antes de enviar</label>
+                                </div>
+
+                                <div class="form-checkbox">
+                                    <input type="checkbox" id="wait_${index}" 
+                                        ${step.waitForReply ? 'checked' : ''}
+                                        onchange="updateStep(${index}, 'waitForReply', this.checked)">
+                                    <label for="wait_${index}">⏸️ Aguardar resposta do cliente</label>
+                                </div>
+                                `}
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                if (index < currentFunnelData.steps.length - 1) {
+                    html += `
+                        <div class="connector">
+                            <div class="connector-line">
+                                <div class="connector-arrow"></div>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+
+            container.innerHTML = html;
+        }
+
+        async function saveFunnel() {
+            if (!currentFunnelData) {
+                alert('Selecione um funil para salvar');
+                return;
+            }
+            
+            if (currentFunnelData.steps.length === 0) {
+                alert('Adicione pelo menos um passo ao funil');
+                return;
+            }
+            
+            // Validar passos
+            for (let i = 0; i < currentFunnelData.steps.length; i++) {
+                const step = currentFunnelData.steps[i];
+                
+                if (step.type === 'text' && (!step.text || step.text.trim() === '')) {
+                    alert(`Passo ${i + 1}: Texto é obrigatório`);
+                    return;
+                }
+                
+                if (step.type === 'delay' && (!step.delaySeconds || step.delaySeconds <= 0)) {
+                    alert(`Passo ${i + 1}: Tempo de delay é obrigatório`);
+                    return;
+                }
+                
+                if ((step.type === 'image' || step.type === 'video' || step.type === 'audio') && 
+                    (!step.mediaUrl || step.mediaUrl.trim() === '')) {
+                    alert(`Passo ${i + 1}: URL da mídia é obrigatória`);
+                    return;
+                }
+            }
+            
+            try {
+                const response = await fetch('/api/funnels', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(currentFunnelData)
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('✅ Funil salvo com sucesso!');
+                    editingStepIndex = -1;
+                    await loadAllFunnels();
+                    renderSteps();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro ao salvar funil: ' + error.message);
+            }
+        }
+
+        async function exportFunnels() {
+            try {
+                const response = await fetch('/api/funnels/export');
+                if (response.ok) {
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    const today = new Date().toISOString().split('T')[0];
+                    a.download = `kirvano-funis-${today}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+                    alert('✅ Backup dos funis salvo com sucesso!');
+                } else {
+                    alert('❌ Erro ao gerar backup');
+                }
+            } catch (error) {
+                alert('❌ Erro: ' + error.message);
+            }
+        }
+
+        function importFunnels() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.style.display = 'none';
+            
+            input.onchange = async function(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                
+                try {
+                    const text = await file.text();
+                    const importData = JSON.parse(text);
+                    
+                    if (!importData.funnels || !Array.isArray(importData.funnels)) {
+                        alert('❌ Arquivo inválido!');
+                        return;
+                    }
+                    
+                    if (!confirm(`Importar ${importData.funnels.length} funis?\n\nIsso vai sobrescrever funis existentes com mesmo ID.`)) {
+                        return;
+                    }
+                    
+                    const response = await fetch('/api/funnels/import', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(importData)
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert(`✅ Funis importados!\n\n${result.imported} importados\n${result.skipped} ignorados`);
+                        await loadAllFunnels();
+                        loadFunnelEditor();
+                    } else {
+                        alert('❌ Erro: ' + result.error);
+                    }
+                    
+                } catch (error) {
+                    alert('❌ Erro: ' + error.message);
+                }
+                
+                document.body.removeChild(input);
+            };
+            
+            document.body.appendChild(input);
+            input.click();
+        }
+
+        // FRASES-CHAVE
+        async function loadPhrases() {
+            try {
+                const response = await fetch('/api/phrases');
+                const result = await response.json();
+                
+                if (result.success) {
+                    allPhrases = result.data;
+                    renderPhrases();
+                }
+            } catch (error) {
+                console.error('Erro ao carregar frases:', error);
+            }
+        }
+
+        function renderPhrases() {
+            const container = document.getElementById('phrasesListContainer');
+            
+            if (allPhrases.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-workspace">
+                        <h3>Nenhuma frase cadastrada</h3>
+                        <p>Clique em "Adicionar Frase" para começar</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            allPhrases.forEach(phrase => {
+                const funnel = allFunnels[phrase.funnelId];
+                const funnelName = funnel ? funnel.name : 'Funil não encontrado';
+                
+                html += `
+                    <div class="phrase-card ${phrase.active ? '' : 'inactive'}">
+                        <div class="phrase-header">
+                            <div>
+                                <div class="phrase-text">"${phrase.phrase}"</div>
+                                <div class="phrase-info">
+                                    <span><strong>Funil:</strong> ${funnelName}</span>
+                                    <span><strong>Acionamentos:</strong> ${phrase.triggerCount}</span>
+                                    <span><strong>Status:</strong> ${phrase.active ? '✅ Ativo' : '⏸️ Inativo'}</span>
+                                </div>
+                            </div>
+                            <div class="phrase-actions">
+                                <button class="btn btn-small" onclick="togglePhraseStatus('${phrase.phrase}', ${!phrase.active})">
+                                    ${phrase.active ? 'Desativar' : 'Ativar'}
+                                </button>
+                                <button class="btn btn-small" onclick="editPhrase('${phrase.phrase}')">Editar</button>
+                                <button class="btn btn-small btn-danger" onclick="deletePhrase('${phrase.phrase}')">Excluir</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function openPhraseModal(phrase = null) {
+            editingPhrase = phrase;
+            const modal = document.getElementById('phraseModal');
+            const title = document.getElementById('modalTitle');
+            const phraseInput = document.getElementById('modalPhrase');
+            const funnelSelect = document.getElementById('modalFunnel');
+            
+            if (phrase) {
+                const phraseData = allPhrases.find(p => p.phrase === phrase);
+                title.textContent = 'Editar Frase-Chave';
+                phraseInput.value = phrase;
+                phraseInput.disabled = true;
+                funnelSelect.value = phraseData.funnelId;
+            } else {
+                title.textContent = 'Adicionar Frase-Chave';
+                phraseInput.value = '';
+                phraseInput.disabled = false;
+                funnelSelect.value = '';
+            }
+            
+            modal.classList.add('active');
+        }
+
+        function closePhraseModal() {
+            document.getElementById('phraseModal').classList.remove('active');
+            editingPhrase = null;
+        }
+
+        async function savePhraseModal() {
+            const phrase = document.getElementById('modalPhrase').value.trim();
+            const funnelId = document.getElementById('modalFunnel').value;
+            
+            if (!phrase) {
+                alert('Digite a frase-chave!');
+                return;
+            }
+            
+            if (!funnelId) {
+                alert('Selecione um funil!');
+                return;
+            }
+            
+            try {
+                if (editingPhrase) {
+                    const response = await fetch(`/api/phrases/${encodeURIComponent(editingPhrase)}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ funnelId })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert('✅ Frase atualizada!');
+                        closePhraseModal();
+                        await loadPhrases();
+                    } else {
+                        alert('❌ Erro: ' + result.error);
+                    }
+                } else {
+                    const response = await fetch('/api/phrases', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phrase, funnelId })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert('✅ Frase cadastrada com sucesso!');
+                        closePhraseModal();
+                        await loadPhrases();
+                        loadDashboard();
+                    } else {
+                        alert('❌ Erro: ' + result.error);
+                    }
+                }
+            } catch (error) {
+                alert('❌ Erro: ' + error.message);
+            }
+        }
+
+        function editPhrase(phrase) {
+            openPhraseModal(phrase);
+        }
+
+        async function togglePhraseStatus(phrase, active) {
+            try {
+                const response = await fetch(`/api/phrases/${encodeURIComponent(phrase)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ active })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadPhrases();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro: ' + error.message);
+            }
+        }
+
+        async function deletePhrase(phrase) {
+            if (!confirm(`Excluir a frase "${phrase}"?\n\nEsta ação não pode ser desfeita.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/phrases/${encodeURIComponent(phrase)}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('✅ Frase excluída!');
+                    await loadPhrases();
+                    loadDashboard();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro: ' + error.message);
+            }
+        }
+
+        // 🆕 NOVO: FRASES DE DISPARO MANUAL
+        async function loadManualTriggers() {
+            try {
+                const response = await fetch('/api/manual-triggers');
+                const result = await response.json();
+                
+                if (result.success) {
+                    allManualTriggers = result.data;
+                    renderManualTriggers();
+                }
+            } catch (error) {
+                console.error('Erro ao carregar frases manuais:', error);
+            }
+        }
+
+        function renderManualTriggers() {
+            const container = document.getElementById('manualTriggersListContainer');
+            
+            if (allManualTriggers.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-workspace">
+                        <h3>Nenhuma frase de disparo cadastrada</h3>
+                        <p>Clique em "Adicionar Frase de Disparo" para começar</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            allManualTriggers.forEach(trigger => {
+                const funnel = allFunnels[trigger.funnelId];
+                const funnelName = funnel ? funnel.name : 'Funil não encontrado';
+                
+                html += `
+                    <div class="phrase-card ${trigger.active ? '' : 'inactive'}">
+                        <div class="phrase-header">
+                            <div>
+                                <div class="phrase-text">🎯 "${trigger.phrase}"</div>
+                                <div class="phrase-info">
+                                    <span><strong>Funil:</strong> ${funnelName}</span>
+                                    <span><strong>Disparos:</strong> ${trigger.triggerCount}</span>
+                                    <span><strong>Status:</strong> ${trigger.active ? '✅ Ativo' : '⏸️ Inativo'}</span>
+                                </div>
+                            </div>
+                            <div class="phrase-actions">
+                                <button class="btn btn-small" onclick="toggleManualTriggerStatus('${trigger.phrase}', ${!trigger.active})">
+                                    ${trigger.active ? 'Desativar' : 'Ativar'}
+                                </button>
+                                <button class="btn btn-small" onclick="editManualTrigger('${trigger.phrase}')">Editar</button>
+                                <button class="btn btn-small btn-danger" onclick="deleteManualTrigger('${trigger.phrase}')">Excluir</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function openManualTriggerModal(phrase = null) {
+            editingManualTrigger = phrase;
+            const modal = document.getElementById('manualTriggerModal');
+            const title = document.getElementById('manualModalTitle');
+            const phraseInput = document.getElementById('manualModalPhrase');
+            const funnelSelect = document.getElementById('manualModalFunnel');
+            
+            if (phrase) {
+                const triggerData = allManualTriggers.find(p => p.phrase === phrase);
+                title.textContent = 'Editar Frase de Disparo Manual';
+                phraseInput.value = phrase;
+                phraseInput.disabled = true;
+                funnelSelect.value = triggerData.funnelId;
+            } else {
+                title.textContent = 'Adicionar Frase de Disparo Manual';
+                phraseInput.value = '';
+                phraseInput.disabled = false;
+                funnelSelect.value = '';
+            }
+            
+            modal.classList.add('active');
+        }
+
+        function closeManualTriggerModal() {
+            document.getElementById('manualTriggerModal').classList.remove('active');
+            editingManualTrigger = null;
+        }
+
+        async function saveManualTriggerModal() {
+            const phrase = document.getElementById('manualModalPhrase').value.trim();
+            const funnelId = document.getElementById('manualModalFunnel').value;
+            
+            if (!phrase) {
+                alert('Digite a frase de disparo!');
+                return;
+            }
+            
+            if (!funnelId) {
+                alert('Selecione um funil!');
+                return;
+            }
+            
+            try {
+                if (editingManualTrigger) {
+                    const response = await fetch(`/api/manual-triggers/${encodeURIComponent(editingManualTrigger)}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ funnelId })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert('✅ Frase de disparo atualizada!');
+                        closeManualTriggerModal();
+                        await loadManualTriggers();
+                    } else {
+                        alert('❌ Erro: ' + result.error);
+                    }
+                } else {
+                    const response = await fetch('/api/manual-triggers', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ phrase, funnelId })
+                    });
+                    
+                    const result = await response.json();
+                    
+                    if (result.success) {
+                        alert('✅ Frase de disparo cadastrada com sucesso!\n\nAgora quando você enviar "' + phrase + '" para um cliente, o funil ' + allFunnels[funnelId].name + ' será disparado automaticamente.');
+                        closeManualTriggerModal();
+                        await loadManualTriggers();
+                    } else {
+                        alert('❌ Erro: ' + result.error);
+                    }
+                }
+            } catch (error) {
+                alert('❌ Erro: ' + error.message);
+            }
+        }
+
+        function editManualTrigger(phrase) {
+            openManualTriggerModal(phrase);
+        }
+
+        async function toggleManualTriggerStatus(phrase, active) {
+            try {
+                const response = await fetch(`/api/manual-triggers/${encodeURIComponent(phrase)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ active })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    await loadManualTriggers();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro: ' + error.message);
+            }
+        }
+
+        async function deleteManualTrigger(phrase) {
+            if (!confirm(`Excluir a frase de disparo "${phrase}"?\n\nEsta ação não pode ser desfeita.`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/manual-triggers/${encodeURIComponent(phrase)}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('✅ Frase de disparo excluída!');
+                    await loadManualTriggers();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro: ' + error.message);
+            }
+        }
+
+        // CONVERSAS
+        async function loadEvents() {
+            try {
+                const response = await fetch('/api/conversations');
+                const result = await response.json();
+                
+                if (result.success) {
+                    renderEvents(result.data);
+                }
+            } catch (error) {
+                console.error('Erro ao carregar eventos:', error);
+            }
+        }
+
+        function renderEvents(events) {
+            const tbody = document.getElementById('eventsTableBody');
+            
+            if (events.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="10" style="text-align: center; padding: 40px; color: #6b7280;">
+                            Nenhuma conversa ativa
+                        </td>
+                    </tr>
+                `;
+                return;
+            }
+
+            let html = '';
+            events.forEach(event => {
+                let statusBadge;
+                if (event.canceled) {
+                    statusBadge = '<span class="badge badge-secondary">Cancelado</span>';
+                } else if (event.completed) {
+                    statusBadge = '<span class="badge badge-success">Concluído</span>';
+                } else if (event.waiting_for_response) {
+                    statusBadge = '<span class="badge badge-warning">Aguardando</span>';
+                } else {
+                    statusBadge = '<span class="badge badge-info">Enviando</span>';
+                }
+                
+                const sourceBadge = event.source === 'phrase' ? 
+                    '<span class="badge badge-purple">Frase</span>' : 
+                    '<span class="badge badge-info">Kirvano</span>';
+                
+                const createdAt = new Date(event.createdAt).toLocaleString('pt-BR');
+
+                html += `
+                    <tr>
+                        <td>${event.customerName}</td>
+                        <td>${event.phone}</td>
+                        <td><code>${event.phoneKey}</code></td>
+                        <td><strong>${event.productType}</strong></td>
+                        <td>${event.funnelId}</td>
+                        <td>${event.stepIndex + 1}</td>
+                        <td>${statusBadge}</td>
+                        <td>${sourceBadge}</td>
+                        <td>${event.stickyInstance || '-'}</td>
+                        <td>${createdAt}</td>
+                    </tr>
+                `;
+            });
+
+            tbody.innerHTML = html;
+        }
+
+        // DASHBOARD
         async function loadDashboard() {
             try {
-                const response = await fetch('/api/stats');
+                const response = await fetch('/api/dashboard');
                 const result = await response.json();
                 
                 if (result.success) {
@@ -680,49 +1897,13 @@
                     document.getElementById('statsPix').textContent = stats.pending_pix || 0;
                     document.getElementById('statsFunnels').textContent = stats.total_funnels || 0;
                     document.getElementById('statsPhrases').textContent = stats.total_phrases || 0;
-                    document.getElementById('statsCampaigns').textContent = stats.active_campaigns || 0;
                 }
             } catch (error) {
                 console.error('Erro ao carregar dashboard:', error);
             }
         }
 
-        // ============ FUNIS ============
-        async function loadAllFunnels() {
-            try {
-                const response = await fetch('/api/funnels');
-                const result = await response.json();
-                
-                if (result.success && result.data.length > 0) {
-                    const container = document.getElementById('funnelsContainer');
-                    container.innerHTML = result.data.map(funnel => `
-                        <div style="border: 2px solid #e5e7eb; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <h3 style="font-size: 18px; color: #1f2937;">${funnel.name}</h3>
-                                    <p style="font-size: 14px; color: #6b7280; margin-top: 4px;">
-                                        ${funnel.steps.length} blocos configurados
-                                    </p>
-                                </div>
-                                <button class="btn btn-primary" onclick="editFunnel('${funnel.id}')">
-                                    Editar Blocos
-                                </button>
-                            </div>
-                        </div>
-                    `).join('');
-                } else {
-                    document.getElementById('funnelsContainer').innerHTML = `
-                        <div class="empty-state">
-                            <h3>Nenhum funil cadastrado</h3>
-                            <p>Clique em "Criar Funil" para começar</p>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                console.error('Erro ao carregar funis:', error);
-            }
-        }
-
+        // CRIAR NOVO FUNIL
         function openCreateFunnelModal() {
             document.getElementById('newFunnelName').value = '';
             document.getElementById('createFunnelModal').classList.add('active');
@@ -742,19 +1923,27 @@
             
             const id = 'PHRASE_' + name.toUpperCase().replace(/[^A-Z0-9]/g, '_').substring(0, 20) + '_' + Date.now();
             
+            const newFunnel = {
+                id: id,
+                name: name,
+                steps: []
+            };
+            
             try {
                 const response = await fetch('/api/funnels', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id, name, steps: [] })
+                    body: JSON.stringify(newFunnel)
                 });
                 
                 const result = await response.json();
                 
                 if (result.success) {
-                    alert(`✅ Funil "${name}" criado com sucesso!`);
+                    alert(`✅ Funil "${name}" criado com sucesso!\n\nAgora você pode adicionar blocos a ele.`);
                     closeCreateFunnelModal();
-                    loadAllFunnels();
+                    await loadAllFunnels();
+                    document.getElementById('funnelSelect').value = id;
+                    loadFunnelEditor();
                 } else {
                     alert('❌ Erro: ' + result.error);
                 }
@@ -763,235 +1952,7 @@
             }
         }
 
-        function editFunnel(funnelId) {
-            window.location.href = `/edit-funnel.html?id=${funnelId}`;
-        }
-
-        // ============ FRASES-CHAVE ============
-        async function loadPhrases() {
-            try {
-                const response = await fetch('/api/phrases');
-                const result = await response.json();
-                
-                if (result.success && result.data.length > 0) {
-                    const container = document.getElementById('phrasesContainer');
-                    container.innerHTML = result.data.map(phrase => `
-                        <div style="border: 2px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 12px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px;">
-                                        "${phrase.phrase}"
-                                    </div>
-                                    <div style="font-size: 14px; color: #6b7280;">
-                                        Dispara: ${phrase.funnelName || phrase.funnelId}
-                                        ${phrase.active ? '<span class="badge badge-success">Ativa</span>' : '<span class="badge badge-error">Inativa</span>'}
-                                    </div>
-                                </div>
-                                <button class="btn btn-danger btn-small" onclick="deletePhrase('${phrase.phrase}')">
-                                    Excluir
-                                </button>
-                            </div>
-                        </div>
-                    `).join('');
-                } else {
-                    document.getElementById('phrasesContainer').innerHTML = `
-                        <div class="empty-state">
-                            <h3>Nenhuma frase cadastrada</h3>
-                            <p>Clique em "Adicionar Frase" para começar</p>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                console.error('Erro ao carregar frases:', error);
-            }
-        }
-
-        async function openPhraseModal() {
-            // Carregar funis no select
-            const response = await fetch('/api/funnels');
-            const result = await response.json();
-            
-            const select = document.getElementById('modalPhraseFunnel');
-            select.innerHTML = '<option value="">Selecione um funil...</option>';
-            
-            if (result.success) {
-                result.data.forEach(funnel => {
-                    select.innerHTML += `<option value="${funnel.id}">${funnel.name}</option>`;
-                });
-            }
-            
-            document.getElementById('modalPhrase').value = '';
-            document.getElementById('phraseModal').classList.add('active');
-        }
-
-        function closePhraseModal() {
-            document.getElementById('phraseModal').classList.remove('active');
-        }
-
-        async function savePhrase() {
-            const phrase = document.getElementById('modalPhrase').value.trim().toLowerCase();
-            const funnelId = document.getElementById('modalPhraseFunnel').value;
-            
-            if (!phrase || !funnelId) {
-                alert('Preencha todos os campos!');
-                return;
-            }
-            
-            try {
-                const response = await fetch('/api/phrases', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phrase, funnelId })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ Frase cadastrada com sucesso!');
-                    closePhraseModal();
-                    loadPhrases();
-                } else {
-                    alert('❌ Erro: ' + result.error);
-                }
-            } catch (error) {
-                alert('❌ Erro ao salvar frase: ' + error.message);
-            }
-        }
-
-        async function deletePhrase(phrase) {
-            if (!confirm(`Deseja realmente excluir a frase "${phrase}"?`)) return;
-            
-            try {
-                const response = await fetch(`/api/phrases/${encodeURIComponent(phrase)}`, {
-                    method: 'DELETE'
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ Frase excluída!');
-                    loadPhrases();
-                } else {
-                    alert('❌ Erro: ' + result.error);
-                }
-            } catch (error) {
-                alert('❌ Erro ao excluir frase: ' + error.message);
-            }
-        }
-
-        // ============ FRASES MANUAIS ============
-        async function loadManualTriggers() {
-            try {
-                const response = await fetch('/api/manual-triggers');
-                const result = await response.json();
-                
-                if (result.success && result.data.length > 0) {
-                    const container = document.getElementById('manualTriggersContainer');
-                    container.innerHTML = result.data.map(trigger => `
-                        <div style="border: 2px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-bottom: 12px;">
-                            <div style="display: flex; justify-content: space-between; align-items: center;">
-                                <div>
-                                    <div style="font-weight: 600; color: #1f2937; margin-bottom: 4px;">
-                                        "${trigger.phrase}"
-                                    </div>
-                                    <div style="font-size: 14px; color: #6b7280;">
-                                        Quando VOCÊ enviar isso → Dispara: ${trigger.funnelName || trigger.funnelId}
-                                        ${trigger.active ? '<span class="badge badge-success">Ativa</span>' : '<span class="badge badge-error">Inativa</span>'}
-                                    </div>
-                                </div>
-                                <button class="btn btn-danger btn-small" onclick="deleteManualTrigger('${trigger.id}')">
-                                    Excluir
-                                </button>
-                            </div>
-                        </div>
-                    `).join('');
-                } else {
-                    document.getElementById('manualTriggersContainer').innerHTML = `
-                        <div class="empty-state">
-                            <h3>Nenhuma frase manual cadastrada</h3>
-                            <p>Frases manuais são disparadas quando VOCÊ envia a mensagem</p>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                console.error('Erro ao carregar frases manuais:', error);
-            }
-        }
-
-        async function openManualTriggerModal() {
-            // Carregar funis no select
-            const response = await fetch('/api/funnels');
-            const result = await response.json();
-            
-            const select = document.getElementById('modalManualFunnel');
-            select.innerHTML = '<option value="">Selecione um funil...</option>';
-            
-            if (result.success) {
-                result.data.forEach(funnel => {
-                    select.innerHTML += `<option value="${funnel.id}">${funnel.name}</option>`;
-                });
-            }
-            
-            document.getElementById('modalManualPhrase').value = '';
-            document.getElementById('manualTriggerModal').classList.add('active');
-        }
-
-        function closeManualTriggerModal() {
-            document.getElementById('manualTriggerModal').classList.remove('active');
-        }
-
-        async function saveManualTrigger() {
-            const phrase = document.getElementById('modalManualPhrase').value.trim().toLowerCase();
-            const funnelId = document.getElementById('modalManualFunnel').value;
-            
-            if (!phrase || !funnelId) {
-                alert('Preencha todos os campos!');
-                return;
-            }
-            
-            try {
-                const response = await fetch('/api/manual-triggers', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ phrase, funnelId })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ Frase manual cadastrada com sucesso!');
-                    closeManualTriggerModal();
-                    loadManualTriggers();
-                } else {
-                    alert('❌ Erro: ' + result.error);
-                }
-            } catch (error) {
-                alert('❌ Erro ao salvar frase manual: ' + error.message);
-            }
-        }
-
-        async function deleteManualTrigger(id) {
-            if (!confirm('Deseja realmente excluir esta frase manual?')) return;
-            
-            try {
-                const response = await fetch(`/api/manual-triggers/${id}`, {
-                    method: 'DELETE'
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ Frase manual excluída!');
-                    loadManualTriggers();
-                } else {
-                    alert('❌ Erro: ' + result.error);
-                }
-            } catch (error) {
-                alert('❌ Erro ao excluir frase manual: ' + error.message);
-            }
-        }
-
-        // ============ CAMPANHAS ============
+        // 🚀 ============ CAMPANHAS ============
         async function loadCampaigns() {
             try {
                 const response = await fetch('/api/campaigns');
@@ -1010,7 +1971,7 @@
                             ? '<span class="badge badge-warning">Pausada</span>'
                             : campaign.status === 'completed'
                             ? '<span class="badge badge-info">Concluída</span>'
-                            : '<span class="badge badge-error">Cancelada</span>';
+                            : '<span class="badge badge-danger">Cancelada</span>';
                         
                         return `
                             <div class="campaign-card">
@@ -1064,7 +2025,7 @@
                     }).join('');
                 } else {
                     document.getElementById('campaignsContainer').innerHTML = `
-                        <div class="empty-state">
+                        <div class="empty-workspace">
                             <h3>Nenhuma campanha ativa</h3>
                             <p>Crie uma campanha para enviar funis em massa</p>
                         </div>
@@ -1077,17 +2038,12 @@
 
         async function openCampaignModal() {
             // Carregar funis no select
-            const response = await fetch('/api/funnels');
-            const result = await response.json();
-            
             const select = document.getElementById('campaignFunnel');
-            select.innerHTML = '<option value="">Selecione um funil...</option>';
+            select.innerHTML = '<option value="">-- Selecione um funil --</option>';
             
-            if (result.success) {
-                result.data.forEach(funnel => {
-                    select.innerHTML += `<option value="${funnel.id}">${funnel.name}</option>`;
-                });
-            }
+            Object.values(allFunnels).forEach(funnel => {
+                select.innerHTML += `<option value="${funnel.id}">${funnel.name}</option>`;
+            });
             
             // Limpar campos
             document.getElementById('campaignName').value = '';
@@ -1227,56 +2183,50 @@
             }
         }
 
-        // ============ CONVERSAS ============
-        async function loadConversations() {
-            try {
-                const response = await fetch('/api/conversations');
-                const result = await response.json();
-                
-                if (result.success && result.data.length > 0) {
-                    const tbody = document.getElementById('conversationsTableBody');
-                    tbody.innerHTML = result.data.map(conv => {
-                        const statusBadge = conv.completed 
-                            ? '<span class="badge badge-success">Completo</span>'
-                            : conv.canceled
-                            ? '<span class="badge badge-error">Cancelado</span>'
-                            : conv.pixWaiting
-                            ? '<span class="badge badge-warning">Aguardando PIX</span>'
-                            : '<span class="badge badge-info">Em andamento</span>';
-                        
-                        return `
-                            <tr>
-                                <td>${conv.customerName || 'N/A'}</td>
-                                <td>${conv.phone}</td>
-                                <td>${conv.productType || 'N/A'}</td>
-                                <td style="font-size: 12px;">${conv.funnelId}</td>
-                                <td>${conv.stepIndex + 1}</td>
-                                <td>${statusBadge}</td>
-                                <td><span class="badge badge-info">${conv.source || 'kirvano'}</span></td>
-                                <td>${conv.stickyInstance || 'N/A'}</td>
-                                <td style="font-size: 12px;">${new Date(conv.createdAt).toLocaleString('pt-BR')}</td>
-                            </tr>
-                        `;
-                    }).join('');
-                } else {
-                    document.getElementById('conversationsTableBody').innerHTML = `
-                        <tr>
-                            <td colspan="9" style="text-align: center; padding: 40px; color: #6b7280;">
-                                Nenhuma conversa registrada
-                            </td>
-                        </tr>
-                    `;
-                }
-            } catch (error) {
-                console.error('Erro ao carregar conversas:', error);
-            }
-        }
-
-        // ============ INICIALIZAÇÃO ============
-        window.onload = function() {
+        // INICIALIZAÇÃO
+        document.addEventListener('DOMContentLoaded', async function() {
+            await loadAllFunnels();
             loadDashboard();
-            setInterval(loadDashboard, 10000); // Atualizar a cada 10 segundos
-        };
+            
+            // Atualizar dados periodicamente
+            setInterval(() => {
+                loadDashboard();
+                const activeTab = document.querySelector('.tab-content.active');
+                if (activeTab.id === 'events') {
+                    loadEvents();
+                } else if (activeTab.id === 'phrases') {
+                    loadPhrases();
+                    loadManualTriggers(); // 🆕 NOVO
+                }
+            }, 10000);
+        });
+
+        // Fechar modal clicando fora
+        document.getElementById('phraseModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closePhraseModal();
+            }
+        });
+
+        document.getElementById('createFunnelModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCreateFunnelModal();
+            }
+        });
+
+        // 🆕 NOVO: Fechar modal de disparo manual
+        document.getElementById('manualTriggerModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeManualTriggerModal();
+            }
+        });
+
+        // 🚀 NOVO: Fechar modal de campanha
+        document.getElementById('campaignModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCampaignModal();
+            }
+        });
     </script>
 </body>
 </html>
