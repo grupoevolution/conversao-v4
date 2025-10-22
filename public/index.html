@@ -1044,25 +1044,6 @@
     </div>
 
     <script>
-        // 🔧 FUNÇÃO AUXILIAR: Tratar requisições fetch com validação de JSON
-        async function safeFetch(url, options = {}) {
-            try {
-                const response = await fetch(url, options);
-                
-                // Verificar se a resposta é JSON
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    throw new Error('Servidor retornou resposta inválida. Verifique os logs do servidor.');
-                }
-                
-                const result = await response.json();
-                return result;
-            } catch (error) {
-                console.error('Erro na requisição:', error);
-                throw error;
-            }
-        }
-
         let currentFunnelData = null;
         let editingStepIndex = -1;
         let allFunnels = {};
@@ -1403,11 +1384,26 @@
             }
             
             try {
-                const result = await safeFetch('/api/funnels', {
-                    method: 'POST',
+                // 🔧 CORREÇÃO: Verificar se o funil já existe para usar PUT ou POST
+                const isExistingFunnel = allFunnels[currentFunnelData.id];
+                const method = isExistingFunnel ? 'PUT' : 'POST';
+                const url = isExistingFunnel 
+                    ? `/api/funnels/${currentFunnelData.id}` 
+                    : '/api/funnels';
+                
+                const response = await fetch(url, {
+                    method: method,
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(currentFunnelData)
                 });
+                
+                // Verificar se a resposta é JSON
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    throw new Error('Servidor retornou resposta inválida. Verifique se o servidor está rodando corretamente.');
+                }
+                
+                const result = await response.json();
                 
                 if (result.success) {
                     alert('✅ Funil salvo com sucesso!');
@@ -1418,6 +1414,7 @@
                     alert('❌ Erro: ' + result.error);
                 }
             } catch (error) {
+                console.error('Erro completo:', error);
                 alert('❌ Erro ao salvar funil: ' + error.message);
             }
         }
