@@ -560,100 +560,6 @@
         .badge-secondary { background: #f3f4f6; color: #374151; }
         .badge-purple { background: #ede9fe; color: #6d28d9; }
 
-        /* CAMPANHAS */
-        .campaign-card {
-            background: white;
-            border: 2px solid #e5e7eb;
-            border-radius: 12px;
-            padding: 20px;
-            margin-bottom: 16px;
-            transition: all 0.3s;
-        }
-
-        .campaign-card:hover {
-            border-color: #667eea;
-            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
-        }
-
-        .campaign-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 16px;
-        }
-
-        .campaign-name {
-            font-size: 18px;
-            font-weight: 600;
-            color: #1f2937;
-        }
-
-        .campaign-stats {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 16px;
-            margin-bottom: 16px;
-        }
-
-        .campaign-stat {
-            text-align: center;
-        }
-
-        .campaign-stat-value {
-            font-size: 24px;
-            font-weight: 700;
-            color: #1f2937;
-        }
-
-        .campaign-stat-label {
-            font-size: 12px;
-            color: #6b7280;
-            margin-top: 4px;
-        }
-
-        .progress-bar {
-            width: 100%;
-            height: 8px;
-            background: #f3f4f6;
-            border-radius: 4px;
-            overflow: hidden;
-            margin-bottom: 16px;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(135deg, #10b981, #059669);
-            transition: width 0.3s;
-        }
-
-        .campaign-actions {
-            display: flex;
-            gap: 8px;
-        }
-
-        .btn-small {
-            padding: 6px 12px;
-            font-size: 12px;
-        }
-
-        .file-upload {
-            border: 2px dashed #e5e7eb;
-            border-radius: 8px;
-            padding: 32px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-
-        .file-upload:hover {
-            border-color: #667eea;
-            background: #f8fafc;
-        }
-
-        .file-upload input {
-            display: none;
-        }
-
         @media (max-width: 768px) {
             .funnel-editor {
                 flex-direction: column;
@@ -675,8 +581,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Kirvano - Sistema Completo de Funis <span class="version-badge">v5.3</span></h1>
-            <p>Sistema unificado: Funis Kirvano + Funis por Frase-Chave + Disparo Manual | 15 Instâncias Ativas</p>
+            <h1>Kirvano - Sistema Completo de Funis <span class="version-badge">v5.2</span></h1>
+            <p>Sistema unificado: Funis Kirvano + Funis por Frase-Chave | 15 Instâncias Ativas</p>
             
             <div class="stats-grid">
                 <div class="stat-card highlight">
@@ -711,7 +617,6 @@
             <div class="main-tabs">
                 <button class="main-tab active" onclick="switchMainTab('editor')">Editor de Funis</button>
                 <button class="main-tab" onclick="switchMainTab('phrases')">Funis por Frase</button>
-                <button class="main-tab" onclick="switchMainTab('campaigns')">🚀 Campanhas</button>
                 <button class="main-tab" onclick="switchMainTab('events')">Conversas</button>
             </div>
 
@@ -804,7 +709,7 @@
             <div id="phrases" class="tab-content">
                 <div class="phrases-container">
                     <div class="phrases-header">
-                        <h2>Funis Ativados por Frase-Chave (Cliente → Sistema)</h2>
+                        <h2>Funis Ativados por Frase-Chave</h2>
                         <button class="btn btn-success" onclick="openPhraseModal()">+ Adicionar Frase</button>
                     </div>
                     
@@ -812,43 +717,6 @@
                         <div class="empty-workspace">
                             <h3>Nenhuma frase cadastrada</h3>
                             <p>Clique em "Adicionar Frase" para começar</p>
-                        </div>
-                    </div>
-
-                    <hr style="margin: 40px 0; border: none; border-top: 2px solid #e5e7eb;">
-
-                    <!-- 🆕 NOVO: Frases de Disparo Manual -->
-                    <div class="phrases-header">
-                        <h2>🎯 Frases de Disparo Manual (Você → Cliente)</h2>
-                        <button class="btn btn-success" onclick="openManualTriggerModal()">+ Adicionar Frase de Disparo</button>
-                    </div>
-
-                    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-                        <p style="color: #92400e; margin: 0; font-size: 14px;">
-                            <strong>💡 Como funciona:</strong> Quando VOCÊ enviar uma dessas frases para um cliente no WhatsApp, o sistema automaticamente dispara o funil configurado. Exemplo: você envia "oiie bb" e o funil começa.
-                        </p>
-                    </div>
-                    
-                    <div id="manualTriggersListContainer">
-                        <div class="empty-workspace">
-                            <h3>Nenhuma frase de disparo cadastrada</h3>
-                            <p>Clique em "Adicionar Frase de Disparo" para começar</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- 🚀 CAMPANHAS -->
-            <div id="campaigns" class="tab-content">
-                <div class="events-container">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                        <h2>🚀 Campanhas de Remarketing</h2>
-                        <button class="btn btn-success" onclick="openCampaignModal()">+ Nova Campanha</button>
-                    </div>
-                    <div id="campaignsContainer">
-                        <div class="empty-workspace">
-                            <h3>Nenhuma campanha ativa</h3>
-                            <p>Crie uma campanha para enviar funis em massa</p>
                         </div>
                     </div>
                 </div>
@@ -930,128 +798,12 @@
         </div>
     </div>
 
-    <!-- 🆕 NOVO: MODAL ADICIONAR/EDITAR FRASE DE DISPARO MANUAL -->
-    <div id="manualTriggerModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header" id="manualModalTitle">Adicionar Frase de Disparo Manual</div>
-            
-            <div class="form-group">
-                <label class="form-label">Frase que VOCÊ vai enviar:</label>
-                <input type="text" id="manualModalPhrase" class="form-input" placeholder="Ex: oiie bb">
-                <small style="color: #6b7280;">Quando você enviar esta frase para um cliente, o funil será disparado automaticamente</small>
-            </div>
-            
-            <div class="form-group">
-                <label class="form-label">Funil a disparar:</label>
-                <select id="manualModalFunnel" class="form-input">
-                    <option value="">-- Selecione um funil --</option>
-                </select>
-                <small style="color: #6b7280;">Escolha qual funil será enviado quando você usar esta frase</small>
-            </div>
-            
-            <div class="modal-actions">
-                <button class="btn" style="flex: 1;" onclick="closeManualTriggerModal()">Cancelar</button>
-                <button class="btn btn-success" style="flex: 1;" onclick="saveManualTriggerModal()">Salvar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 🚀 NOVO: MODAL CRIAR CAMPANHA -->
-    <div id="campaignModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">🚀 Criar Nova Campanha de Remarketing</div>
-            
-            <div class="form-group">
-                <label class="form-label">Nome da Campanha:</label>
-                <input type="text" id="campaignName" class="form-input" placeholder="Ex: Remarketing Instagram">
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">Funil a ser enviado:</label>
-                <select id="campaignFunnel" class="form-input">
-                    <option value="">-- Selecione um funil --</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">⚙️ Configurações de Envio:</label>
-                <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin-top: 8px;">
-                    <div style="margin-bottom: 12px;">
-                        <label style="font-weight: 600; color: #374151; font-size: 14px; display: block; margin-bottom: 6px;">
-                            📊 Limite Diário por Instância:
-                        </label>
-                        <input type="number" id="campaignDailyLimit" class="form-input" value="10" min="1" max="50" style="width: 100px;">
-                        <small style="color: #6b7280; display: block; margin-top: 6px;">
-                            Recomendado: 10 envios/dia (150 total com 15 instâncias)<br>
-                            ⚠️ Valores altos podem causar bloqueio
-                        </small>
-                    </div>
-                    <div style="margin-bottom: 12px;">
-                        <strong style="color: #1f2937;">⏱️ Intervalos Automáticos:</strong>
-                        <div style="color: #6b7280; font-size: 14px; margin-top: 4px;">
-                            • Aleatório entre 40 minutos e 2 horas<br>
-                            • Evita padrões e bloqueios
-                        </div>
-                    </div>
-                    <div>
-                        <label style="font-weight: 600; color: #374151; font-size: 14px; display: block; margin-bottom: 8px;">
-                            🕐 Horário de Funcionamento (Brasília):
-                        </label>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                            <div>
-                                <label style="font-size: 13px; color: #6b7280;">Início:</label>
-                                <input type="number" id="campaignStartHour" class="form-input" value="7" min="0" max="23" style="margin-top: 4px;">
-                            </div>
-                            <div>
-                                <label style="font-size: 13px; color: #6b7280;">Fim:</label>
-                                <input type="number" id="campaignEndHour" class="form-input" value="22" min="0" max="23" style="margin-top: 4px;">
-                            </div>
-                        </div>
-                        <small style="color: #6b7280; display: block; margin-top: 6px;">
-                            Envios apenas neste período (Horário de Brasília)
-                        </small>
-                    </div>
-                </div>
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">Lista de Contatos:</label>
-                <div class="file-upload" onclick="document.getElementById('contactsFile').click()">
-                    <input type="file" id="contactsFile" accept=".txt" onchange="handleFileUpload(event)">
-                    <div id="fileUploadText">
-                        <div style="font-size: 48px; margin-bottom: 12px;">📄</div>
-                        <div style="font-weight: 600; margin-bottom: 8px;">Clique para fazer upload</div>
-                        <div style="font-size: 14px; color: #6b7280;">
-                            Arquivo TXT com um número por linha<br>
-                            Formato: 5575999999999 (DDI + DDD + Número)
-                        </div>
-                    </div>
-                </div>
-                <div id="fileInfo" style="margin-top: 12px; display: none;">
-                    <div style="padding: 12px; background: #ecfdf5; border-radius: 8px; border: 1px solid #10b981;">
-                        <strong style="color: #065f46;">✓ Arquivo carregado:</strong>
-                        <div id="fileName" style="color: #047857; margin-top: 4px;"></div>
-                        <div id="contactCount" style="color: #047857; font-size: 14px; margin-top: 4px;"></div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="modal-actions">
-                <button class="btn" style="flex: 1;" onclick="closeCampaignModal()">Cancelar</button>
-                <button class="btn btn-success" style="flex: 1;" onclick="createCampaign()">Criar e Iniciar</button>
-            </div>
-        </div>
-    </div>
-
     <script>
         let currentFunnelData = null;
         let editingStepIndex = -1;
         let allFunnels = {};
         let allPhrases = [];
         let editingPhrase = null;
-        let allManualTriggers = []; // 🆕 NOVO
-        let editingManualTrigger = null; // 🆕 NOVO
-        let currentContacts = []; // 🚀 CAMPANHAS
 
         // NAVEGAÇÃO
         function switchMainTab(tabName) {
@@ -1064,9 +816,6 @@
                 loadEvents();
             } else if (tabName === 'phrases') {
                 loadPhrases();
-                loadManualTriggers(); // 🆕 NOVO
-            } else if (tabName === 'campaigns') {
-                loadCampaigns(); // 🚀 CAMPANHAS
             }
         }
 
@@ -1115,24 +864,6 @@
             
             if (currentValue) {
                 modalFunnel.value = currentValue;
-            }
-
-            // 🆕 NOVO: Atualizar dropdown de funis no modal de disparo manual
-            const manualModalFunnel = document.getElementById('manualModalFunnel');
-            const currentManualValue = manualModalFunnel.value;
-            manualModalFunnel.innerHTML = '<option value="">-- Selecione um funil --</option>';
-            
-            Object.values(allFunnels).forEach(funnel => {
-                if (funnel.id.startsWith('PHRASE_') || funnel.id.startsWith('CS_') || funnel.id.startsWith('FB_')) {
-                    const option = document.createElement('option');
-                    option.value = funnel.id;
-                    option.textContent = funnel.name;
-                    manualModalFunnel.appendChild(option);
-                }
-            });
-            
-            if (currentManualValue) {
-                manualModalFunnel.value = currentManualValue;
             }
         }
 
@@ -1384,24 +1115,11 @@
             }
             
             try {
-                // 🔧 CORREÇÃO: Verificar se o funil já existe para usar PUT ou POST
-                const isExistingFunnel = allFunnels[currentFunnelData.id];
-                const method = isExistingFunnel ? 'PUT' : 'POST';
-                const url = isExistingFunnel 
-                    ? `/api/funnels/${currentFunnelData.id}` 
-                    : '/api/funnels';
-                
-                const response = await fetch(url, {
-                    method: method,
+                const response = await fetch('/api/funnels', {
+                    method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(currentFunnelData)
                 });
-                
-                // Verificar se a resposta é JSON
-                const contentType = response.headers.get('content-type');
-                if (!contentType || !contentType.includes('application/json')) {
-                    throw new Error('Servidor retornou resposta inválida. Verifique se o servidor está rodando corretamente.');
-                }
                 
                 const result = await response.json();
                 
@@ -1414,7 +1132,6 @@
                     alert('❌ Erro: ' + result.error);
                 }
             } catch (error) {
-                console.error('Erro completo:', error);
                 alert('❌ Erro ao salvar funil: ' + error.message);
             }
         }
@@ -1681,193 +1398,6 @@
             }
         }
 
-        // 🆕 NOVO: FRASES DE DISPARO MANUAL
-        async function loadManualTriggers() {
-            try {
-                const response = await fetch('/api/manual-triggers');
-                const result = await response.json();
-                
-                if (result.success) {
-                    allManualTriggers = result.data;
-                    renderManualTriggers();
-                }
-            } catch (error) {
-                console.error('Erro ao carregar frases manuais:', error);
-            }
-        }
-
-        function renderManualTriggers() {
-            const container = document.getElementById('manualTriggersListContainer');
-            
-            if (allManualTriggers.length === 0) {
-                container.innerHTML = `
-                    <div class="empty-workspace">
-                        <h3>Nenhuma frase de disparo cadastrada</h3>
-                        <p>Clique em "Adicionar Frase de Disparo" para começar</p>
-                    </div>
-                `;
-                return;
-            }
-
-            let html = '';
-            allManualTriggers.forEach(trigger => {
-                const funnel = allFunnels[trigger.funnelId];
-                const funnelName = funnel ? funnel.name : 'Funil não encontrado';
-                
-                html += `
-                    <div class="phrase-card ${trigger.active ? '' : 'inactive'}">
-                        <div class="phrase-header">
-                            <div>
-                                <div class="phrase-text">🎯 "${trigger.phrase}"</div>
-                                <div class="phrase-info">
-                                    <span><strong>Funil:</strong> ${funnelName}</span>
-                                    <span><strong>Disparos:</strong> ${trigger.triggerCount}</span>
-                                    <span><strong>Status:</strong> ${trigger.active ? '✅ Ativo' : '⏸️ Inativo'}</span>
-                                </div>
-                            </div>
-                            <div class="phrase-actions">
-                                <button class="btn btn-small" onclick="toggleManualTriggerStatus('${trigger.phrase}', ${!trigger.active})">
-                                    ${trigger.active ? 'Desativar' : 'Ativar'}
-                                </button>
-                                <button class="btn btn-small" onclick="editManualTrigger('${trigger.phrase}')">Editar</button>
-                                <button class="btn btn-small btn-danger" onclick="deleteManualTrigger('${trigger.phrase}')">Excluir</button>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            });
-
-            container.innerHTML = html;
-        }
-
-        function openManualTriggerModal(phrase = null) {
-            editingManualTrigger = phrase;
-            const modal = document.getElementById('manualTriggerModal');
-            const title = document.getElementById('manualModalTitle');
-            const phraseInput = document.getElementById('manualModalPhrase');
-            const funnelSelect = document.getElementById('manualModalFunnel');
-            
-            if (phrase) {
-                const triggerData = allManualTriggers.find(p => p.phrase === phrase);
-                title.textContent = 'Editar Frase de Disparo Manual';
-                phraseInput.value = phrase;
-                phraseInput.disabled = true;
-                funnelSelect.value = triggerData.funnelId;
-            } else {
-                title.textContent = 'Adicionar Frase de Disparo Manual';
-                phraseInput.value = '';
-                phraseInput.disabled = false;
-                funnelSelect.value = '';
-            }
-            
-            modal.classList.add('active');
-        }
-
-        function closeManualTriggerModal() {
-            document.getElementById('manualTriggerModal').classList.remove('active');
-            editingManualTrigger = null;
-        }
-
-        async function saveManualTriggerModal() {
-            const phrase = document.getElementById('manualModalPhrase').value.trim();
-            const funnelId = document.getElementById('manualModalFunnel').value;
-            
-            if (!phrase) {
-                alert('Digite a frase de disparo!');
-                return;
-            }
-            
-            if (!funnelId) {
-                alert('Selecione um funil!');
-                return;
-            }
-            
-            try {
-                if (editingManualTrigger) {
-                    const response = await fetch(`/api/manual-triggers/${encodeURIComponent(editingManualTrigger)}`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ funnelId })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        alert('✅ Frase de disparo atualizada!');
-                        closeManualTriggerModal();
-                        await loadManualTriggers();
-                    } else {
-                        alert('❌ Erro: ' + result.error);
-                    }
-                } else {
-                    const response = await fetch('/api/manual-triggers', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ phrase, funnelId })
-                    });
-                    
-                    const result = await response.json();
-                    
-                    if (result.success) {
-                        alert('✅ Frase de disparo cadastrada com sucesso!\n\nAgora quando você enviar "' + phrase + '" para um cliente, o funil ' + allFunnels[funnelId].name + ' será disparado automaticamente.');
-                        closeManualTriggerModal();
-                        await loadManualTriggers();
-                    } else {
-                        alert('❌ Erro: ' + result.error);
-                    }
-                }
-            } catch (error) {
-                alert('❌ Erro: ' + error.message);
-            }
-        }
-
-        function editManualTrigger(phrase) {
-            openManualTriggerModal(phrase);
-        }
-
-        async function toggleManualTriggerStatus(phrase, active) {
-            try {
-                const response = await fetch(`/api/manual-triggers/${encodeURIComponent(phrase)}`, {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ active })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    await loadManualTriggers();
-                } else {
-                    alert('❌ Erro: ' + result.error);
-                }
-            } catch (error) {
-                alert('❌ Erro: ' + error.message);
-            }
-        }
-
-        async function deleteManualTrigger(phrase) {
-            if (!confirm(`Excluir a frase de disparo "${phrase}"?\n\nEsta ação não pode ser desfeita.`)) {
-                return;
-            }
-            
-            try {
-                const response = await fetch(`/api/manual-triggers/${encodeURIComponent(phrase)}`, {
-                    method: 'DELETE'
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ Frase de disparo excluída!');
-                    await loadManualTriggers();
-                } else {
-                    alert('❌ Erro: ' + result.error);
-                }
-            } catch (error) {
-                alert('❌ Erro: ' + error.message);
-            }
-        }
-
         // CONVERSAS
         async function loadEvents() {
             try {
@@ -2001,262 +1531,6 @@
             }
         }
 
-        // 🚀 ============ CAMPANHAS ============
-        async function loadCampaigns() {
-            try {
-                const response = await fetch('/api/campaigns');
-                const result = await response.json();
-                
-                if (result.success && result.data.length > 0) {
-                    const container = document.getElementById('campaignsContainer');
-                    container.innerHTML = result.data.map(campaign => {
-                        const progress = campaign.totalContacts > 0 
-                            ? (campaign.stats.sent / campaign.totalContacts * 100).toFixed(1) 
-                            : 0;
-                        
-                        const statusBadge = campaign.status === 'active' 
-                            ? '<span class="badge badge-success">Ativa</span>'
-                            : campaign.status === 'paused'
-                            ? '<span class="badge badge-warning">Pausada</span>'
-                            : campaign.status === 'completed'
-                            ? '<span class="badge badge-info">Concluída</span>'
-                            : '<span class="badge badge-danger">Cancelada</span>';
-                        
-                        return `
-                            <div class="campaign-card">
-                                <div class="campaign-header">
-                                    <div class="campaign-name">${campaign.name}</div>
-                                    ${statusBadge}
-                                </div>
-                                
-                                <div class="campaign-stats">
-                                    <div class="campaign-stat">
-                                        <div class="campaign-stat-value">${campaign.stats.sent}</div>
-                                        <div class="campaign-stat-label">Enviados</div>
-                                    </div>
-                                    <div class="campaign-stat">
-                                        <div class="campaign-stat-value">${campaign.totalContacts}</div>
-                                        <div class="campaign-stat-label">Total</div>
-                                    </div>
-                                    <div class="campaign-stat">
-                                        <div class="campaign-stat-value">${campaign.stats.errors}</div>
-                                        <div class="campaign-stat-label">Erros</div>
-                                    </div>
-                                </div>
-                                
-                                <div class="progress-bar">
-                                    <div class="progress-fill" style="width: ${progress}%"></div>
-                                </div>
-                                
-                                <div style="font-size: 14px; color: #6b7280; margin-bottom: 16px;">
-                                    <strong>Funil:</strong> ${campaign.funnelName || campaign.funnelId}<br>
-                                    <strong>Progresso:</strong> ${progress}% concluído<br>
-                                    <strong>Criada em:</strong> ${new Date(campaign.createdAt).toLocaleString('pt-BR')}
-                                </div>
-                                
-                                <div class="campaign-actions">
-                                    ${campaign.status === 'active' ? `
-                                        <button class="btn btn-warning btn-small" onclick="pauseCampaign('${campaign.id}')">
-                                            ⏸ Pausar
-                                        </button>
-                                    ` : ''}
-                                    ${campaign.status === 'paused' ? `
-                                        <button class="btn btn-success btn-small" onclick="resumeCampaign('${campaign.id}')">
-                                            ▶ Retomar
-                                        </button>
-                                    ` : ''}
-                                    <button class="btn btn-danger btn-small" onclick="cancelCampaign('${campaign.id}')">
-                                        ✖ Cancelar
-                                    </button>
-                                </div>
-                            </div>
-                        `;
-                    }).join('');
-                } else {
-                    document.getElementById('campaignsContainer').innerHTML = `
-                        <div class="empty-workspace">
-                            <h3>Nenhuma campanha ativa</h3>
-                            <p>Crie uma campanha para enviar funis em massa</p>
-                        </div>
-                    `;
-                }
-            } catch (error) {
-                console.error('Erro ao carregar campanhas:', error);
-            }
-        }
-
-        async function openCampaignModal() {
-            // Carregar funis no select
-            const select = document.getElementById('campaignFunnel');
-            select.innerHTML = '<option value="">-- Selecione um funil --</option>';
-            
-            Object.values(allFunnels).forEach(funnel => {
-                select.innerHTML += `<option value="${funnel.id}">${funnel.name}</option>`;
-            });
-            
-            // Limpar campos
-            document.getElementById('campaignName').value = '';
-            document.getElementById('campaignDailyLimit').value = '10';
-            document.getElementById('campaignStartHour').value = '7';
-            document.getElementById('campaignEndHour').value = '22';
-            document.getElementById('contactsFile').value = '';
-            document.getElementById('fileInfo').style.display = 'none';
-            currentContacts = [];
-            
-            document.getElementById('campaignModal').classList.add('active');
-        }
-
-        function closeCampaignModal() {
-            document.getElementById('campaignModal').classList.remove('active');
-        }
-
-        function handleFileUpload(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                const content = e.target.result;
-                const lines = content.split('\n')
-                    .map(line => line.trim())
-                    .filter(line => line.length > 0);
-                
-                currentContacts = lines;
-                
-                document.getElementById('fileName').textContent = file.name;
-                document.getElementById('contactCount').textContent = `${lines.length} contatos encontrados`;
-                document.getElementById('fileInfo').style.display = 'block';
-            };
-            reader.readAsText(file);
-        }
-
-        async function createCampaign() {
-            const name = document.getElementById('campaignName').value.trim();
-            const funnelId = document.getElementById('campaignFunnel').value;
-            const dailyLimit = parseInt(document.getElementById('campaignDailyLimit').value);
-            const startHour = parseInt(document.getElementById('campaignStartHour').value);
-            const endHour = parseInt(document.getElementById('campaignEndHour').value);
-            
-            if (!name || !funnelId || currentContacts.length === 0) {
-                alert('Preencha todos os campos e faça upload da lista de contatos!');
-                return;
-            }
-            
-            if (dailyLimit < 1 || dailyLimit > 50) {
-                alert('Limite diário deve estar entre 1 e 50!');
-                return;
-            }
-            
-            if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23) {
-                alert('Horários devem estar entre 0 e 23!');
-                return;
-            }
-            
-            if (startHour >= endHour) {
-                alert('Horário de início deve ser menor que horário de fim!');
-                return;
-            }
-            
-            const totalPerDay = dailyLimit * 15;
-            const estimatedDays = Math.ceil(currentContacts.length / totalPerDay);
-            
-            try {
-                const response = await fetch('/api/campaigns', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        name,
-                        funnelId,
-                        contacts: currentContacts,
-                        config: {
-                            dailyLimit,
-                            startHour,
-                            endHour
-                        }
-                    })
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert(`✅ Campanha "${name}" criada com sucesso!\n\n` +
-                          `📊 Informações:\n` +
-                          `• Total de contatos: ${currentContacts.length}\n` +
-                          `• Envios por dia: ${totalPerDay} (15 instâncias × ${dailyLimit})\n` +
-                          `• Previsão: ~${estimatedDays} dias\n` +
-                          `• Horário: ${startHour}h às ${endHour}h (Brasília)\n` +
-                          `• Intervalos: 40min a 2h (aleatórios)`);
-                    closeCampaignModal();
-                    loadCampaigns();
-                    loadDashboard();
-                } else {
-                    alert('❌ Erro: ' + result.error);
-                }
-            } catch (error) {
-                alert('❌ Erro ao criar campanha: ' + error.message);
-            }
-        }
-
-        async function pauseCampaign(campaignId) {
-            try {
-                const response = await fetch(`/api/campaigns/${campaignId}/pause`, {
-                    method: 'PUT'
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ Campanha pausada!');
-                    loadCampaigns();
-                } else {
-                    alert('❌ Erro: ' + result.error);
-                }
-            } catch (error) {
-                alert('❌ Erro ao pausar campanha: ' + error.message);
-            }
-        }
-
-        async function resumeCampaign(campaignId) {
-            try {
-                const response = await fetch(`/api/campaigns/${campaignId}/resume`, {
-                    method: 'PUT'
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ Campanha retomada!');
-                    loadCampaigns();
-                } else {
-                    alert('❌ Erro: ' + result.error);
-                }
-            } catch (error) {
-                alert('❌ Erro ao retomar campanha: ' + error.message);
-            }
-        }
-
-        async function cancelCampaign(campaignId) {
-            if (!confirm('Deseja realmente cancelar esta campanha?')) return;
-            
-            try {
-                const response = await fetch(`/api/campaigns/${campaignId}`, {
-                    method: 'DELETE'
-                });
-                
-                const result = await response.json();
-                
-                if (result.success) {
-                    alert('✅ Campanha cancelada!');
-                    loadCampaigns();
-                    loadDashboard();
-                } else {
-                    alert('❌ Erro: ' + result.error);
-                }
-            } catch (error) {
-                alert('❌ Erro ao cancelar campanha: ' + error.message);
-            }
-        }
-
         // INICIALIZAÇÃO
         document.addEventListener('DOMContentLoaded', async function() {
             await loadAllFunnels();
@@ -2270,7 +1544,6 @@
                     loadEvents();
                 } else if (activeTab.id === 'phrases') {
                     loadPhrases();
-                    loadManualTriggers(); // 🆕 NOVO
                 }
             }, 10000);
         });
@@ -2285,20 +1558,6 @@
         document.getElementById('createFunnelModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeCreateFunnelModal();
-            }
-        });
-
-        // 🆕 NOVO: Fechar modal de disparo manual
-        document.getElementById('manualTriggerModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeManualTriggerModal();
-            }
-        });
-
-        // 🚀 NOVO: Fechar modal de campanha
-        document.getElementById('campaignModal').addEventListener('click', function(e) {
-            if (e.target === this) {
-                closeCampaignModal();
             }
         });
     </script>
