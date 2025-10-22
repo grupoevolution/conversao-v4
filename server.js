@@ -16,6 +16,7 @@ const CONVERSATIONS_FILE = path.join(__dirname, 'data', 'conversations.json');
 const PHRASES_FILE = path.join(__dirname, 'data', 'phrases.json');
 const LOGS_FILE = path.join(__dirname, 'data', 'logs.json');
 const MANUAL_TRIGGERS_FILE = path.join(__dirname, 'data', 'manual_triggers.json');
+const CAMPAIGNS_FILE = path.join(__dirname, 'data', 'campaigns.json');
 
 // Produtos CS e FB
 const PRODUCT_MAPPING = {
@@ -43,6 +44,9 @@ let lastSuccessfulInstanceIndex = -1;
 let phraseTriggers = new Map();
 let phraseCooldowns = new Map();
 let manualTriggers = new Map();
+let campaigns = new Map(); // 🆕 NOVO: Campanhas de massa
+let campaignQueues = new Map(); // 🆕 NOVO: Filas de envio por campanha
+let campaignCooldowns = new Map(); // 🆕 NOVO: Cooldown de campanhas
 
 const LOG_LEVELS = {
     DEBUG: 'DEBUG',
@@ -253,6 +257,47 @@ async function loadManualTriggersFromFile() {
     }
 }
 
+// 🆕 NOVO: Salvar/Carregar Campanhas
+async function saveCampaignsToFile() {
+    try {
+        await ensureDataDir();
+        const campaignsArray = Array.from(campaigns.entries()).map(([id, campaign]) => ({
+            id,
+            ...campaign,
+            createdAt: campaign.createdAt.toISOString(),
+            startedAt: campaign.startedAt ? campaign.startedAt.toISOString() : null,
+            pausedAt: campaign.pausedAt ? campaign.pausedAt.toISOString() : null,
+            completedAt: campaign.completedAt ? campaign.completedAt.toISOString() : null
+        }));
+        await fs.writeFile(CAMPAIGNS_FILE, JSON.stringify(campaignsArray, null, 2));
+        addLog('CAMPAIGNS_SAVE', `Campanhas salvas: ${campaignsArray.length}`, null, LOG_LEVELS.DEBUG);
+    } catch (error) {
+        addLog('CAMPAIGNS_SAVE_ERROR', `Erro: ${error.message}`, null, LOG_LEVELS.ERROR);
+    }
+}
+
+async function loadCampaignsFromFile() {
+    try {
+        const data = await fs.readFile(CAMPAIGNS_FILE, 'utf8');
+        const campaignsArray = JSON.parse(data);
+        campaigns.clear();
+        campaignsArray.forEach(item => {
+            campaigns.set(item.id, {
+                ...item,
+                createdAt: new Date(item.createdAt),
+                startedAt: item.startedAt ? new Date(item.startedAt) : null,
+                pausedAt: item.pausedAt ? new Date(item.pausedAt) : null,
+                completedAt: item.completedAt ? new Date(item.completedAt) : null
+            });
+        });
+        addLog('CAMPAIGNS_LOAD', `Campanhas carregadas: ${campaigns.size}`, null, LOG_LEVELS.INFO);
+        return true;
+    } catch (error) {
+        addLog('CAMPAIGNS_LOAD_ERROR', 'Nenhuma campanha anterior', null, LOG_LEVELS.DEBUG);
+        return false;
+    }
+}
+
 async function saveConversationsToFile() {
     try {
         await ensureDataDir();
@@ -310,6 +355,7 @@ setInterval(async () => {
     await saveConversationsToFile();
     await savePhrasesToFile();
     await saveManualTriggersToFile();
+    await saveCampaignsToFile(); // 🆕 NOVO
     await saveLogsToFile();
 }, 30000);
 
@@ -928,6 +974,168 @@ async function advanceConversation(phoneKey, replyText, reason) {
     await sendStep(phoneKey);
 }
 
+// ============ CAMPANHAS DE MASSA ============
+
+function validatePhoneNumber(phone) {
+    const cleaned = phone.replace(/\D/g, '');
+    if (cleaned.length < 10 || cleaned.length > 13) return null;
+    return cleaned;
+}
+
+function distributeContactsToInstances(contacts, maxPerInstance) {
+    const queues = {};
+    INSTANCES.forEach(inst => queues[inst] = []);
+    
+    let currentIndex = 0;
+    contacts.forEach(contact => {
+        const instance = INSTANCES[currentIndex % INSTANCES.length];
+        if (queues[instance].length < maxPerInstance) {
+            queues[instance].push(contact);
+        }
+        currentIndex++;
+    });
+    
+    return queues;
+}
+
+function generateInstanceSchedule(instance, contacts, config) {
+    const schedule = [];
+    const startMinutes = config.startHour * 60;
+    const endMinutes = config.endHour * 60;
+    const availableMinutes = endMinutes - startMinutes;
+    
+    if (contacts.length === 0) return schedule;
+    
+    contacts.forEach((contact, index) => {
+        const baseInterval = config.intervalMinutes;
+        const variation = Math.floor(Math.random() * (config.maxVariation * 2 + 1)) - config.maxVariation;
+        const interval = baseInterval + variation;
+        
+        const sendTime = startMinutes + (interval * index);
+        
+        if (sendTime < endMinutes) {
+            schedule.push({
+                contact,
+                time: sendTime,
+                hour: Math.floor(sendTime / 60),
+                minute: sendTime % 60,
+                timestamp: null
+            });
+        }
+    });
+    
+    return schedule;
+}
+
+async function processCampaignQueue(campaignId) {
+    const campaign = campaigns.get(campaignId);
+    
+    if (!campaign || campaign.status === 'paused' || campaign.status === 'completed' || campaign.status === 'cancelled') {
+        return;
+    }
+    
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentTotalMinutes = currentHour * 60 + currentMinute;
+    
+    if (currentHour < campaign.config.startHour || currentHour >= campaign.config.endHour) {
+        setTimeout(() => processCampaignQueue(campaignId), 60000);
+        return;
+    }
+    
+    const queues = campaignQueues.get(campaignId);
+    if (!queues) return;
+    
+    for (const instance of INSTANCES) {
+        const queue = queues[instance];
+        if (!queue || queue.length === 0) continue;
+        
+        const nextItem = queue[0];
+        if (!nextItem.scheduled) {
+            const baseInterval = campaign.config.intervalMinutes;
+            const variation = Math.floor(Math.random() * (campaign.config.maxVariation * 2 + 1)) - campaign.config.maxVariation;
+            const interval = baseInterval + variation;
+            
+            nextItem.scheduledTime = currentTotalMinutes + interval;
+            nextItem.scheduled = true;
+        }
+        
+        if (nextItem.scheduledTime && currentTotalMinutes >= nextItem.scheduledTime) {
+            queue.shift();
+            
+            const phoneKey = extractPhoneKey(nextItem.contact);
+            
+            const cooldownKey = `${campaignId}:${phoneKey}`;
+            const lastSent = campaignCooldowns.get(cooldownKey);
+            if (lastSent && (Date.now() - lastSent) < campaign.config.cooldownDays * 24 * 60 * 60 * 1000) {
+                addLog('CAMPAIGN_COOLDOWN', `Número em cooldown`, 
+                    { campaignId, phone: nextItem.contact }, LOG_LEVELS.DEBUG);
+                campaign.stats.skipped++;
+                continue;
+            }
+            
+            const conversation = conversations.get(phoneKey);
+            if (conversation && !conversation.completed && !conversation.canceled) {
+                addLog('CAMPAIGN_SKIP_ACTIVE', `Número em conversa ativa`, 
+                    { campaignId, phone: nextItem.contact }, LOG_LEVELS.DEBUG);
+                campaign.stats.skipped++;
+                continue;
+            }
+            
+            try {
+                const remoteJid = phoneToRemoteJid(nextItem.contact);
+                
+                await startFunnel(
+                    phoneKey,
+                    remoteJid,
+                    campaign.funnelId,
+                    'CAMPAIGN_' + campaignId + '_' + Date.now(),
+                    'Lead Campanha',
+                    'CAMPAIGN',
+                    '',
+                    'campaign'
+                );
+                
+                campaign.stats.sent++;
+                campaignCooldowns.set(cooldownKey, Date.now());
+                
+                addLog('CAMPAIGN_SENT', `Funil disparado`, 
+                    { campaignId, instance, phone: nextItem.contact, funnelId: campaign.funnelId }, LOG_LEVELS.INFO);
+                
+            } catch (error) {
+                campaign.stats.errors++;
+                addLog('CAMPAIGN_ERROR', error.message, 
+                    { campaignId, instance, phone: nextItem.contact }, LOG_LEVELS.ERROR);
+            }
+            
+            saveCampaignsToFile();
+        }
+    }
+    
+    let allQueuesEmpty = true;
+    for (const instance of INSTANCES) {
+        if (queues[instance] && queues[instance].length > 0) {
+            allQueuesEmpty = false;
+            break;
+        }
+    }
+    
+    if (allQueuesEmpty) {
+        campaign.status = 'completed';
+        campaign.completedAt = new Date();
+        campaigns.set(campaignId, campaign);
+        saveCampaignsToFile();
+        
+        addLog('CAMPAIGN_COMPLETED', `Campanha finalizada`, 
+            { campaignId, sent: campaign.stats.sent, errors: campaign.stats.errors }, LOG_LEVELS.INFO);
+    } else {
+        setTimeout(() => processCampaignQueue(campaignId), 30000);
+    }
+}
+
+// ============ WEBHOOKS ============
+
 app.post('/webhook/kirvano', async (req, res) => {
     const requestId = Date.now() + Math.random();
     
@@ -1526,6 +1734,169 @@ app.delete('/api/manual-triggers/:phrase', (req, res) => {
     }
 });
 
+// 🆕 NOVO: API para Campanhas de Massa
+app.get('/api/campaigns', (req, res) => {
+    const campaignsList = Array.from(campaigns.entries()).map(([id, campaign]) => ({
+        id,
+        name: campaign.name,
+        funnelId: campaign.funnelId,
+        status: campaign.status,
+        totalContacts: campaign.totalContacts,
+        stats: campaign.stats,
+        config: campaign.config,
+        createdAt: campaign.createdAt,
+        startedAt: campaign.startedAt,
+        pausedAt: campaign.pausedAt,
+        completedAt: campaign.completedAt
+    }));
+    
+    campaignsList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    res.json({ success: true, data: campaignsList });
+});
+
+app.post('/api/campaigns', async (req, res) => {
+    try {
+        const { name, funnelId, contacts, config } = req.body;
+        
+        if (!name || !funnelId || !contacts || !Array.isArray(contacts) || contacts.length === 0) {
+            return res.status(400).json({ success: false, error: 'Dados inválidos' });
+        }
+        
+        if (!funis.has(funnelId)) {
+            return res.status(400).json({ success: false, error: 'Funil não encontrado' });
+        }
+        
+        const validContacts = contacts
+            .map(c => validatePhoneNumber(c))
+            .filter(c => c !== null);
+        
+        if (validContacts.length === 0) {
+            return res.status(400).json({ success: false, error: 'Nenhum contato válido' });
+        }
+        
+        const campaignId = 'CAMP_' + Date.now();
+        
+        const campaign = {
+            id: campaignId,
+            name,
+            funnelId,
+            status: 'active',
+            totalContacts: validContacts.length,
+            stats: {
+                sent: 0,
+                errors: 0,
+                skipped: 0
+            },
+            config: {
+                maxPerInstanceDay: config.maxPerInstanceDay || 10,
+                intervalMinutes: config.intervalMinutes || 90,
+                maxVariation: config.maxVariation || 15,
+                startHour: config.startHour || 7,
+                endHour: config.endHour || 22,
+                cooldownDays: config.cooldownDays || 30
+            },
+            createdAt: new Date(),
+            startedAt: new Date(),
+            pausedAt: null,
+            completedAt: null
+        };
+        
+        campaigns.set(campaignId, campaign);
+        
+        const queues = distributeContactsToInstances(validContacts, config.maxPerInstanceDay || 10);
+        campaignQueues.set(campaignId, queues);
+        
+        saveCampaignsToFile();
+        
+        processCampaignQueue(campaignId);
+        
+        addLog('CAMPAIGN_CREATED', `Campanha criada: ${name}`, 
+            { campaignId, contacts: validContacts.length, funnelId }, LOG_LEVELS.INFO);
+        
+        res.json({ success: true, campaignId, campaign });
+        
+    } catch (error) {
+        addLog('CAMPAIGN_CREATE_ERROR', error.message, null, LOG_LEVELS.ERROR);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.put('/api/campaigns/:id/pause', (req, res) => {
+    const campaignId = req.params.id;
+    const campaign = campaigns.get(campaignId);
+    
+    if (!campaign) {
+        return res.status(404).json({ success: false, error: 'Campanha não encontrada' });
+    }
+    
+    campaign.status = 'paused';
+    campaign.pausedAt = new Date();
+    campaigns.set(campaignId, campaign);
+    saveCampaignsToFile();
+    
+    addLog('CAMPAIGN_PAUSED', `Campanha pausada`, { campaignId }, LOG_LEVELS.INFO);
+    
+    res.json({ success: true, message: 'Campanha pausada' });
+});
+
+app.put('/api/campaigns/:id/resume', (req, res) => {
+    const campaignId = req.params.id;
+    const campaign = campaigns.get(campaignId);
+    
+    if (!campaign) {
+        return res.status(404).json({ success: false, error: 'Campanha não encontrada' });
+    }
+    
+    campaign.status = 'active';
+    campaign.pausedAt = null;
+    campaigns.set(campaignId, campaign);
+    saveCampaignsToFile();
+    
+    processCampaignQueue(campaignId);
+    
+    addLog('CAMPAIGN_RESUMED', `Campanha retomada`, { campaignId }, LOG_LEVELS.INFO);
+    
+    res.json({ success: true, message: 'Campanha retomada' });
+});
+
+app.delete('/api/campaigns/:id', (req, res) => {
+    const campaignId = req.params.id;
+    const campaign = campaigns.get(campaignId);
+    
+    if (!campaign) {
+        return res.status(404).json({ success: false, error: 'Campanha não encontrada' });
+    }
+    
+    campaign.status = 'cancelled';
+    campaigns.set(campaignId, campaign);
+    campaignQueues.delete(campaignId);
+    saveCampaignsToFile();
+    
+    addLog('CAMPAIGN_CANCELLED', `Campanha cancelada`, { campaignId }, LOG_LEVELS.INFO);
+    
+    res.json({ success: true, message: 'Campanha cancelada' });
+});
+
+app.get('/api/campaigns/:id/queue', (req, res) => {
+    const campaignId = req.params.id;
+    const queues = campaignQueues.get(campaignId);
+    
+    if (!queues) {
+        return res.status(404).json({ success: false, error: 'Fila não encontrada' });
+    }
+    
+    const queueStatus = {};
+    INSTANCES.forEach(instance => {
+        queueStatus[instance] = {
+            remaining: queues[instance] ? queues[instance].length : 0,
+            next: queues[instance] && queues[instance][0] ? queues[instance][0] : null
+        };
+    });
+    
+    res.json({ success: true, data: queueStatus });
+});
+
 app.get('/api/conversations', (req, res) => {
     const conversationsList = Array.from(conversations.entries()).map(([phoneKey, conv]) => ({
         id: phoneKey,
@@ -1623,13 +1994,24 @@ async function initializeData() {
     await loadConversationsFromFile();
     await loadPhrasesFromFile();
     await loadManualTriggersFromFile();
+    await loadCampaignsFromFile(); // 🆕 NOVO
     await loadLogsFromFile();
     console.log('✅ Inicialização concluída');
     console.log('📊 Funis:', funis.size);
     console.log('💬 Conversas:', conversations.size);
     console.log('🔑 Frases:', phraseTriggers.size);
     console.log('🎯 Frases Manuais:', manualTriggers.size);
+    console.log('📢 Campanhas:', campaigns.size); // 🆕 NOVO
     console.log('📋 Logs:', logs.length);
+    
+    // 🆕 NOVO: Retomar campanhas ativas
+    campaigns.forEach((campaign, id) => {
+        if (campaign.status === 'active') {
+            addLog('CAMPAIGN_RESUME_STARTUP', `Retomando campanha: ${campaign.name}`, 
+                { campaignId: id }, LOG_LEVELS.INFO);
+            processCampaignQueue(id);
+        }
+    });
 }
 
 app.listen(PORT, async () => {
