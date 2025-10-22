@@ -197,6 +197,13 @@ async function loadFunnelsFromFile() {
         return true;
     } catch (error) {
         addLog('DATA_LOAD_ERROR', 'Usando funis padrão', null, LOG_LEVELS.WARNING);
+        // 🔧 CORREÇÃO: Inicializar funis padrão quando arquivo não existe
+        funis.clear();
+        Object.values(defaultFunnels).forEach(funnel => {
+            funis.set(funnel.id, { ...funnel });
+        });
+        addLog('DEFAULT_FUNNELS_INIT', `Funis padrão inicializados: ${funis.size}`, null, LOG_LEVELS.INFO);
+        await saveFunnelsToFile(); // Salvar funis padrão no arquivo
         return false;
     }
 }
