@@ -750,15 +750,6 @@ async function transferPixToApproved(phoneKey, remoteJid, orderCode, customerNam
 }
 
 async function startFunnel(phoneKey, remoteJid, funnelId, orderCode, customerName, productType, amount, source = 'kirvano') {
-    // 🔥 CRÍTICO: Verificar se já existe conversa ativa em memória
-    const existingConv = conversations.get(phoneKey);
-    if (existingConv && !existingConv.completed && !existingConv.canceled) {
-        addLog('FUNNEL_START_BLOCKED', `Conversa já ativa: ${existingConv.funnelId}`, 
-            { phoneKey, existingFunnel: existingConv.funnelId, newFunnel: funnelId }, 
-            LOG_LEVELS.WARNING);
-        return; // NÃO iniciar novo funil se já existe um ativo
-    }
-    
     const conversation = {
         phoneKey,
         remoteJid,
@@ -1067,7 +1058,6 @@ app.post('/webhook/evolution', async (req, res) => {
                 const funnel = funis.get(triggeredFunnelId);
                 
                 if (funnel && funnel.steps && funnel.steps.length > 0) {
-                    // 🔥 CRÍTICO: Verificar e cancelar conversa ativa
                     const existingConversation = conversations.get(phoneKey);
                     
                     if (existingConversation && !existingConversation.completed && !existingConversation.canceled) {
@@ -1080,14 +1070,11 @@ app.post('/webhook/evolution', async (req, res) => {
                         conversations.set(phoneKey, existingConversation);
                         
                         if (pixTimeouts.has(phoneKey)) {
-                            clearTimeout(pixTimeouts.get(phoneKey).timeout);
+                            clearTimeout(pixTimeouts.get(phoneKey));
                             pixTimeouts.delete(phoneKey);
                             addLog('PIX_TIMEOUT_CLEARED', 'Timeout PIX cancelado', 
                                 { phoneKey }, LOG_LEVELS.DEBUG);
                         }
-                        
-                        // 🔥 IMPORTANTE: Aguardar 500ms para garantir que cancelamento foi processado
-                        await new Promise(resolve => setTimeout(resolve, 500));
                     }
                     
                     addLog('MANUAL_TRIGGER_FUNNEL_START', `Disparando funil ${triggeredFunnelId}`, 
