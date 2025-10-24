@@ -1183,14 +1183,20 @@ app.post('/webhook/evolution', async (req, res) => {
                     }
                     
                     // CRÍTICO: Setar sticky instance ANTES de iniciar o funil
-                    if (instanceName && INSTANCES.includes(instanceName)) {
-                        stickyInstances.set(phoneKey, instanceName);
-                        addLog('STICKY_INSTANCE_SET_MANUAL', `Sticky fixada em: ${instanceName}`, 
-                            { requestId, phoneKey }, LOG_LEVELS.INFO);
+                    // Normalizar nome da instância (remover espaços)
+                    const normalizedInstance = instanceName ? instanceName.replace(/\s+/g, '') : null;
+                    
+                    if (normalizedInstance && INSTANCES.includes(normalizedInstance)) {
+                        stickyInstances.set(phoneKey, normalizedInstance);
+                        addLog('STICKY_INSTANCE_SET_MANUAL', `Sticky fixada em: ${normalizedInstance}`, 
+                            { requestId, phoneKey, originalName: instanceName }, LOG_LEVELS.INFO);
+                    } else {
+                        addLog('STICKY_INSTANCE_NOT_SET', `Instância não encontrada: "${instanceName}"`, 
+                            { requestId, phoneKey, normalized: normalizedInstance, availableInstances: INSTANCES }, LOG_LEVELS.WARNING);
                     }
                     
                     addLog('MANUAL_TRIGGER_FUNNEL_START', `Disparando funil ${triggeredFunnelId}`, 
-                        { requestId, phoneKey, instanceName, phrase: messageText }, LOG_LEVELS.INFO);
+                        { requestId, phoneKey, instanceName: normalizedInstance || instanceName, phrase: messageText }, LOG_LEVELS.INFO);
                     
                     await startFunnel(
                         phoneKey, 
@@ -1235,14 +1241,20 @@ app.post('/webhook/evolution', async (req, res) => {
                     
                     if (funnel && funnel.steps && funnel.steps.length > 0) {
                         // CRÍTICO: Setar sticky instance ANTES de iniciar o funil
-                        if (instanceName && INSTANCES.includes(instanceName)) {
-                            stickyInstances.set(phoneKey, instanceName);
-                            addLog('STICKY_INSTANCE_SET_PHRASE', `Sticky fixada em: ${instanceName}`, 
-                                { requestId, phoneKey }, LOG_LEVELS.INFO);
+                        // Normalizar nome da instância (remover espaços)
+                        const normalizedInstance = instanceName ? instanceName.replace(/\s+/g, '') : null;
+                        
+                        if (normalizedInstance && INSTANCES.includes(normalizedInstance)) {
+                            stickyInstances.set(phoneKey, normalizedInstance);
+                            addLog('STICKY_INSTANCE_SET_PHRASE', `Sticky fixada em: ${normalizedInstance}`, 
+                                { requestId, phoneKey, originalName: instanceName }, LOG_LEVELS.INFO);
+                        } else {
+                            addLog('STICKY_INSTANCE_NOT_SET_PHRASE', `Instância não encontrada: "${instanceName}"`, 
+                                { requestId, phoneKey, normalized: normalizedInstance, availableInstances: INSTANCES }, LOG_LEVELS.WARNING);
                         }
                         
                         addLog('PHRASE_FUNNEL_START', `Iniciando funil ${triggeredFunnelId}`, 
-                            { requestId, phoneKey, instanceName }, LOG_LEVELS.INFO);
+                            { requestId, phoneKey, instanceName: normalizedInstance || instanceName }, LOG_LEVELS.INFO);
                         
                         await startFunnel(
                             phoneKey, 
