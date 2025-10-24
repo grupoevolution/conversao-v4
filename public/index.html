@@ -263,6 +263,14 @@
         .btn-import {
             background: linear-gradient(135deg, #7c3aed, #6d28d9);
         }
+        
+        .btn-export {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+        }
+        
+        .btn-danger {
+            background: linear-gradient(135deg, #ef4444, #dc2626);
+        }
 
         .btn-move {
             background: #6b7280;
@@ -785,7 +793,9 @@
                             <div class="current-funnel" id="currentFunnelName">Selecione um funil</div>
                             <div class="workspace-actions">
                                 <button class="btn btn-export" onclick="exportFunnels()">💾 Export</button>
+                                <button class="btn btn-export" onclick="exportFunnels()">📥 Export</button>
                                 <button class="btn btn-import" onclick="importFunnels()">📤 Import</button>
+                                <button class="btn btn-danger" onclick="deleteFunnel()">🗑️ Deletar Funil</button>
                                 <button class="btn" onclick="saveFunnel()">Salvar Funil</button>
                             </div>
                         </div>
@@ -1137,8 +1147,13 @@
         }
 
         function loadFunnelEditor() {
-            const funnelId = document.getElementById('funnelSelect').value;
-            if (!funnelId) {
+            const funnelSelect = document.getElementById('funnelSelect');
+            const funnelId = funnelSelect.value;
+            
+            // Verifica se realmente não há funil selecionado
+            if (!funnelId || funnelId === '') {
+                currentFunnelData = null; // Limpa o funil atual
+                document.getElementById('currentFunnelName').textContent = 'Nenhum funil selecionado';
                 document.getElementById('stepsContainer').innerHTML = `
                     <div class="empty-workspace">
                         <h3>Selecione um funil</h3>
@@ -1148,17 +1163,63 @@
                 return;
             }
             
+            // Carrega o funil selecionado
             currentFunnelData = allFunnels[funnelId];
+            
             if (currentFunnelData) {
+                // Valida estrutura do funil
+                if (!currentFunnelData.steps) currentFunnelData.steps = [];
+                if (!Array.isArray(currentFunnelData.steps)) currentFunnelData.steps = [];
+                
                 document.getElementById('currentFunnelName').textContent = currentFunnelData.name;
                 renderSteps();
+                console.log('Funil carregado:', currentFunnelData.name, 'ID:', funnelId);
+            } else {
+                // Se não encontrar o funil, tenta recarregar a lista
+                console.error('Funil não encontrado:', funnelId);
+                alert('⚠️ Funil não encontrado. Recarregando lista...');
+                loadAllFunnels().then(() => {
+                    currentFunnelData = allFunnels[funnelId];
+                    if (currentFunnelData) {
+                        document.getElementById('currentFunnelName').textContent = currentFunnelData.name;
+                        renderSteps();
+                    }
+                });
             }
         }
 
         function addBlock(type) {
-            if (!currentFunnelData) {
-                alert('Selecione um funil primeiro!');
+            // Verifica se há um funil selecionado
+            const funnelSelect = document.getElementById('funnelSelect');
+            const funnelId = funnelSelect.value;
+            
+            if (!funnelId || funnelId === '') {
+                alert('❌ Por favor, selecione um funil primeiro!');
+                // Destaca o select para o usuário
+                funnelSelect.style.border = '2px solid red';
+                funnelSelect.style.boxShadow = '0 0 10px rgba(255,0,0,0.3)';
+                setTimeout(() => {
+                    funnelSelect.style.border = '';
+                    funnelSelect.style.boxShadow = '';
+                }, 3000);
                 return;
+            }
+            
+            // Se currentFunnelData está null, tenta carregá-lo
+            if (!currentFunnelData) {
+                currentFunnelData = allFunnels[funnelId];
+                if (!currentFunnelData) {
+                    alert('❌ Erro: Funil não encontrado. Recarregando lista de funis...');
+                    loadAllFunnels().then(() => {
+                        loadFunnelEditor();
+                    });
+                    return;
+                }
+            }
+            
+            // Verifica se o funil tem a estrutura correta
+            if (!currentFunnelData.steps) {
+                currentFunnelData.steps = [];
             }
             
             const newStep = {
@@ -1177,6 +1238,12 @@
             
             currentFunnelData.steps.push(newStep);
             renderSteps();
+            
+            // Feedback visual e scroll
+            const container = document.getElementById('stepsContainer');
+            if (container) {
+                container.scrollTop = container.scrollHeight;
+            }
         }
 
         function removeStep(index) {
@@ -1353,32 +1420,38 @@
 
         async function saveFunnel() {
             if (!currentFunnelData) {
-                alert('Selecione um funil primeiro!');
+                alert('❌ Selecione um funil primeiro!');
                 return;
             }
             
-            if (currentFunnelData.steps.length === 0) {
-                alert('Adicione pelo menos um passo ao funil');
+            if (!currentFunnelData.steps || currentFunnelData.steps.length === 0) {
+                alert('⚠️ Adicione pelo menos um passo ao funil');
                 return;
             }
             
-            // Validar passos
+            // Validar passos com os campos corretos
             for (let i = 0; i < currentFunnelData.steps.length; i++) {
                 const step = currentFunnelData.steps[i];
                 
-                if (step.type === 'text' && (!step.content || step.content.trim() === '')) {
-                    alert(`Passo ${i + 1}: Texto é obrigatório`);
+                if (step.type === 'text' && (!step.text || step.text.trim() === '')) {
+                    alert(`⚠️ Passo ${i + 1}: Texto é obrigatório`);
+                    editingStepIndex = i;
+                    renderSteps();
                     return;
                 }
                 
-                if (step.type === 'delay' && (!step.seconds || step.seconds <= 0)) {
-                    alert(`Passo ${i + 1}: Tempo de delay é obrigatório`);
+                if (step.type === 'delay' && (!step.delaySeconds || step.delaySeconds <= 0)) {
+                    alert(`⚠️ Passo ${i + 1}: Tempo de delay deve ser maior que 0`);
+                    editingStepIndex = i;
+                    renderSteps();
                     return;
                 }
                 
-                if ((step.type === 'image' || step.type === 'video' || step.type === 'audio' || step.type === 'document') && 
-                    (!step.url || step.url.trim() === '')) {
-                    alert(`Passo ${i + 1}: URL da mídia é obrigatória`);
+                if ((step.type === 'image' || step.type === 'video' || step.type === 'audio') && 
+                    (!step.mediaUrl || step.mediaUrl.trim() === '')) {
+                    alert(`⚠️ Passo ${i + 1}: URL da mídia é obrigatória para ${step.type}`);
+                    editingStepIndex = i;
+                    renderSteps();
                     return;
                 }
             }
@@ -1388,6 +1461,7 @@
                     method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        id: currentFunnelData.id,
                         name: currentFunnelData.name,
                         steps: currentFunnelData.steps
                     })
@@ -1987,6 +2061,98 @@
                 }
             } catch (error) {
                 alert('❌ Erro ao criar funil: ' + error.message);
+            }
+        }
+
+        // Nova função para EXPORTAR funis
+        async function exportFunnels() {
+            try {
+                const response = await fetch('/api/funnels/export');
+                const result = await response.json();
+                
+                if (result.success) {
+                    const blob = new Blob([JSON.stringify(result.data, null, 2)], {
+                        type: 'application/json'
+                    });
+                    
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `funis_export_${new Date().toISOString().split('T')[0]}.json`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                    
+                    alert(`✅ ${result.data.funnels.length} funis exportados com sucesso!`);
+                } else {
+                    alert('❌ Erro ao exportar: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro ao exportar funis: ' + error.message);
+            }
+        }
+
+        // Nova função para DELETAR funis
+        async function deleteFunnel() {
+            const funnelSelect = document.getElementById('funnelSelect');
+            const funnelId = funnelSelect.value;
+            
+            if (!funnelId) {
+                alert('❌ Selecione um funil para deletar!');
+                return;
+            }
+            
+            const funnel = allFunnels[funnelId];
+            if (!funnel) {
+                alert('❌ Funil não encontrado!');
+                return;
+            }
+            
+            // Verifica se é um funil padrão
+            const defaultIds = ['CS_APROVADA', 'CS_PIX', 'FB_APROVADA', 'FB_PIX'];
+            if (defaultIds.includes(funnelId)) {
+                alert('❌ Não é possível deletar funis padrão do sistema!');
+                return;
+            }
+            
+            if (!confirm(`⚠️ Tem certeza que deseja DELETAR o funil "${funnel.name}"?\n\n` +
+                        `Esta ação é IRREVERSÍVEL e também removerá:\n` +
+                        `• Todas as frases-chave associadas\n` +
+                        `• Todos os triggers manuais associados`)) {
+                return;
+            }
+            
+            // Confirmação dupla para evitar exclusões acidentais
+            if (!confirm(`⚠️⚠️ ÚLTIMA CONFIRMAÇÃO ⚠️⚠️\n\n` +
+                        `Deletar permanentemente o funil "${funnel.name}"?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/funnels/${funnelId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`✅ ${result.message}\n\n` +
+                          `• ${result.deletedPhrases} frases removidas\n` +
+                          `• ${result.deletedTriggers} triggers removidos`);
+                    
+                    // Limpa o editor
+                    currentFunnelData = null;
+                    funnelSelect.value = '';
+                    
+                    // Recarrega a lista de funis
+                    await loadAllFunnels();
+                    loadFunnelEditor();
+                } else {
+                    alert('❌ Erro ao deletar: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro ao deletar funil: ' + error.message);
             }
         }
 
