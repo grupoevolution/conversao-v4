@@ -51,7 +51,6 @@ let lastSuccessfulInstanceIndex = -1;
 let phraseTriggers = new Map();
 let phraseCooldowns = new Map();
 let manualTriggers = new Map();
-let manualTriggerCooldowns = new Map();
 let processedMessageIds = new Map(); // Rastrear mensagens já processadas
 
 // ============ REMARKETING ============
@@ -467,23 +466,10 @@ function checkManualTrigger(messageText, phoneKey) {
         const normalizedPhrase = phrase.toLowerCase().trim();
         
         if (normalizedMessage.includes(normalizedPhrase)) {
-            // Verificar cooldown de 24 horas para evitar disparos múltiplos
-            const cooldownKey = `${phoneKey}:${phrase}`;
-            const lastTrigger = manualTriggerCooldowns.get(cooldownKey);
-            const cooldownTime = 24 * 60 * 60 * 1000; // 24 horas
-            
-            if (lastTrigger && (Date.now() - lastTrigger) < cooldownTime) {
-                const remainingHours = Math.ceil((cooldownTime - (Date.now() - lastTrigger)) / 3600000);
-                addLog('MANUAL_TRIGGER_COOLDOWN', `Cooldown ativo (${remainingHours}h restantes)`, 
-                    { phoneKey, phrase }, LOG_LEVELS.WARNING);
-                return null;
-            }
-            
             addLog('MANUAL_TRIGGER_DETECTED', `Frase manual detectada: "${phrase}"`, 
                 { funnelId: data.funnelId }, LOG_LEVELS.INFO);
             
-            // Registrar o disparo e atualizar cooldown
-            manualTriggerCooldowns.set(cooldownKey, Date.now());
+            // Registrar o disparo
             data.triggerCount = (data.triggerCount || 0) + 1;
             manualTriggers.set(phrase, data);
             saveManualTriggersToFile();
