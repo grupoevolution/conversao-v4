@@ -44,6 +44,7 @@ let conversations = new Map();
 let phoneIndex = new Map();
 let stickyInstances = new Map();
 let pixTimeouts = new Map();
+let delayTimers = new Map(); // Armazenar timers de delay dos steps
 let webhookLocks = new Map();
 let logs = [];
 let funis = new Map();
@@ -781,7 +782,8 @@ async function startFunnel(phoneKey, remoteJid, funnelId, orderCode, customerNam
         lastReply: null,
         canceled: false,
         completed: false,
-        source
+        source,
+        executionId: uuidv4() // ID único desta execução do funil
     };
     
     conversations.set(phoneKey, conversation);
@@ -799,6 +801,9 @@ async function sendStep(phoneKey) {
             { phoneKey }, LOG_LEVELS.ERROR);
         return;
     }
+    
+    // Capturar executionId desta execução
+    const currentExecutionId = conversation.executionId;
     
     if (!validateConversationState(conversation, phoneKey)) {
         addLog('STEP_INVALID_STATE', 'Estado inválido detectado', 
@@ -845,12 +850,28 @@ async function sendStep(phoneKey) {
         addLog('STEP_DELAY_BEFORE', `Aguardando ${delaySeconds}s`, 
             { phoneKey }, LOG_LEVELS.DEBUG);
         await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
+        
+        // Verificar se o funil foi cancelado/trocado durante o delay
+        const updatedConv = conversations.get(phoneKey);
+        if (!updatedConv || updatedConv.executionId !== currentExecutionId) {
+            addLog('STEP_EXECUTION_CANCELED', 'Execução cancelada durante delay', 
+                { phoneKey, oldExecutionId: currentExecutionId }, LOG_LEVELS.WARNING);
+            return;
+        }
     }
     
     if (step.showTyping && step.type !== 'delay') {
         addLog('STEP_SHOW_TYPING', 'Mostrando digitando por 3s', 
             { phoneKey }, LOG_LEVELS.DEBUG);
         await new Promise(resolve => setTimeout(resolve, 3000));
+        
+        // Verificar se o funil foi cancelado/trocado durante o typing
+        const updatedConv = conversations.get(phoneKey);
+        if (!updatedConv || updatedConv.executionId !== currentExecutionId) {
+            addLog('STEP_EXECUTION_CANCELED', 'Execução cancelada durante typing', 
+                { phoneKey, oldExecutionId: currentExecutionId }, LOG_LEVELS.WARNING);
+            return;
+        }
     }
     
     if (step.type === 'delay') {
@@ -858,6 +879,14 @@ async function sendStep(phoneKey) {
         addLog('STEP_DELAY', `Delay de ${delaySeconds}s`, 
             { phoneKey }, LOG_LEVELS.DEBUG);
         await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
+        
+        // Verificar se o funil foi cancelado/trocado durante o delay
+        const updatedConv = conversations.get(phoneKey);
+        if (!updatedConv || updatedConv.executionId !== currentExecutionId) {
+            addLog('STEP_EXECUTION_CANCELED', 'Execução cancelada durante delay de step', 
+                { phoneKey, oldExecutionId: currentExecutionId }, LOG_LEVELS.WARNING);
+            return;
+        }
     } else {
         result = await sendWithFallback(
             phoneKey, 
