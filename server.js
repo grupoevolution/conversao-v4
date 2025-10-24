@@ -1030,28 +1030,6 @@ function getNextInstanceForRemarketing() {
     return INSTANCES[nextIndex];
 }
 
-async function checkInstanceAvailability(instanceName) {
-    try {
-        const url = `${EVOLUTION_BASE_URL}/instance/connectionState/${instanceName}`;
-        const response = await axios.get(url, {
-            headers: { 'apikey': EVOLUTION_API_KEY },
-            timeout: 5000,
-            validateStatus: () => true
-        });
-        
-        const isConnected = response.data?.state === 'open' || response.data?.state === 'connected';
-        
-        addLog('REMARKETING_INSTANCE_CHECK', `${instanceName}: ${isConnected ? 'online' : 'offline'}`, 
-            { instanceName, state: response.data?.state }, LOG_LEVELS.DEBUG);
-        
-        return isConnected;
-    } catch (error) {
-        addLog('REMARKETING_INSTANCE_ERROR', `Erro ao verificar ${instanceName}`, 
-            { instanceName, error: error.message }, LOG_LEVELS.WARNING);
-        return false;
-    }
-}
-
 function isWithinTimeRange(startHour, startMin, endHour, endMin) {
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -1196,16 +1174,7 @@ async function processRemarketingCampaigns() {
                 }
             }
             
-            // Verificar se instância está online
-            const isOnline = await checkInstanceAvailability(instanceName);
-            if (!isOnline) {
-                addLog('REMARKETING_INSTANCE_OFFLINE', `${instanceName} offline, pulando`, 
-                    { instanceName }, LOG_LEVELS.WARNING);
-                instanceAttempts++;
-                continue;
-            }
-            
-            // Tudo OK, enviar para próximo lead
+            // Tentar enviar (sem verificar disponibilidade - igual ao resto do sistema)
             const nextPhone = campaign.leads[campaign.progress.sent];
             
             const result = await sendRemarketingMessage(campaign, nextPhone, instanceName);
@@ -1218,9 +1187,13 @@ async function processRemarketingCampaigns() {
                 addLog('REMARKETING_NEXT_SCHEDULED', `Próximo envio agendado`, 
                     { campaignId, nextSendTime: nextSendTime.toISOString(), delayMin: Math.round(delayMin) }, 
                     LOG_LEVELS.INFO);
+                break; // Enviou com sucesso, sai do loop
+            } else {
+                // Se deu erro, tenta próxima instância
+                addLog('REMARKETING_INSTANCE_FAILED', `${instanceName} falhou, tentando próxima`, 
+                    { instanceName, error: result.error }, LOG_LEVELS.WARNING);
+                instanceAttempts++;
             }
-            
-            break; // Sai do loop de tentativas
         }
         
         if (instanceAttempts >= maxInstanceAttempts) {
