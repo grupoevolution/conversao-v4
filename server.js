@@ -50,6 +50,7 @@ let lastSuccessfulInstanceIndex = -1;
 let phraseTriggers = new Map();
 let phraseCooldowns = new Map();
 let manualTriggers = new Map();
+let manualTriggerCooldowns = new Map();
 
 const LOG_LEVELS = {
     DEBUG: 'DEBUG',
@@ -444,7 +445,7 @@ function checkPhraseTrigger(phoneKey, messageText) {
     return null;
 }
 
-function checkManualTrigger(messageText) {
+function checkManualTrigger(messageText, phoneKey) {
     const normalizedMessage = messageText.toLowerCase().trim();
     
     addLog('MANUAL_TRIGGER_CHECK', `Verificando frase manual: "${normalizedMessage}"`, 
@@ -458,9 +459,23 @@ function checkManualTrigger(messageText) {
         const normalizedPhrase = phrase.toLowerCase().trim();
         
         if (normalizedMessage.includes(normalizedPhrase)) {
+            // Verificar cooldown de 30 segundos para evitar disparos múltiplos
+            const cooldownKey = `${phoneKey}:${phrase}`;
+            const lastTrigger = manualTriggerCooldowns.get(cooldownKey);
+            const cooldownTime = 30000; // 30 segundos
+            
+            if (lastTrigger && (Date.now() - lastTrigger) < cooldownTime) {
+                const remainingSeconds = Math.ceil((cooldownTime - (Date.now() - lastTrigger)) / 1000);
+                addLog('MANUAL_TRIGGER_COOLDOWN', `Cooldown ativo (${remainingSeconds}s restantes)`, 
+                    { phoneKey, phrase }, LOG_LEVELS.WARNING);
+                return null;
+            }
+            
             addLog('MANUAL_TRIGGER_DETECTED', `Frase manual detectada: "${phrase}"`, 
                 { funnelId: data.funnelId }, LOG_LEVELS.INFO);
             
+            // Registrar o disparo e atualizar cooldown
+            manualTriggerCooldowns.set(cooldownKey, Date.now());
             data.triggerCount = (data.triggerCount || 0) + 1;
             manualTriggers.set(phrase, data);
             saveManualTriggersToFile();
@@ -1142,7 +1157,7 @@ app.post('/webhook/evolution', async (req, res) => {
             addLog('EVOLUTION_FROM_ME', 'Mensagem enviada por você', 
                 { requestId, phoneKey, messageText }, LOG_LEVELS.DEBUG);
             
-            const triggeredFunnelId = checkManualTrigger(messageText);
+            const triggeredFunnelId = checkManualTrigger(messageText, phoneKey);
             
             if (triggeredFunnelId) {
                 const funnel = funis.get(triggeredFunnelId);
@@ -1167,14 +1182,15 @@ app.post('/webhook/evolution', async (req, res) => {
                         }
                     }
                     
-                    addLog('MANUAL_TRIGGER_FUNNEL_START', `Disparando funil ${triggeredFunnelId}`, 
-                        { requestId, phoneKey, instanceName, phrase: messageText }, LOG_LEVELS.INFO);
-                    
+                    // CRÍTICO: Setar sticky instance ANTES de iniciar o funil
                     if (instanceName && INSTANCES.includes(instanceName)) {
                         stickyInstances.set(phoneKey, instanceName);
-                        addLog('STICKY_INSTANCE_SET', `Sticky: ${instanceName}`, 
-                            { requestId, phoneKey }, LOG_LEVELS.DEBUG);
+                        addLog('STICKY_INSTANCE_SET_MANUAL', `Sticky fixada em: ${instanceName}`, 
+                            { requestId, phoneKey }, LOG_LEVELS.INFO);
                     }
+                    
+                    addLog('MANUAL_TRIGGER_FUNNEL_START', `Disparando funil ${triggeredFunnelId}`, 
+                        { requestId, phoneKey, instanceName, phrase: messageText }, LOG_LEVELS.INFO);
                     
                     await startFunnel(
                         phoneKey, 
@@ -1218,14 +1234,15 @@ app.post('/webhook/evolution', async (req, res) => {
                     const funnel = funis.get(triggeredFunnelId);
                     
                     if (funnel && funnel.steps && funnel.steps.length > 0) {
-                        addLog('PHRASE_FUNNEL_START', `Iniciando funil ${triggeredFunnelId}`, 
-                            { requestId, phoneKey, instanceName }, LOG_LEVELS.INFO);
-                        
+                        // CRÍTICO: Setar sticky instance ANTES de iniciar o funil
                         if (instanceName && INSTANCES.includes(instanceName)) {
                             stickyInstances.set(phoneKey, instanceName);
-                            addLog('STICKY_INSTANCE_SET', `Sticky: ${instanceName}`, 
-                                { requestId, phoneKey }, LOG_LEVELS.DEBUG);
+                            addLog('STICKY_INSTANCE_SET_PHRASE', `Sticky fixada em: ${instanceName}`, 
+                                { requestId, phoneKey }, LOG_LEVELS.INFO);
                         }
+                        
+                        addLog('PHRASE_FUNNEL_START', `Iniciando funil ${triggeredFunnelId}`, 
+                            { requestId, phoneKey, instanceName }, LOG_LEVELS.INFO);
                         
                         await startFunnel(
                             phoneKey, 
