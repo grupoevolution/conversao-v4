@@ -100,1416 +100,1465 @@ function addLog(type, message, data = null, level = LOG_LEVELS.INFO) {
         [LOG_LEVELS.INFO]: 'ℹ️',
         [LOG_LEVELS.WARNING]: '⚠️',
         [LOG_LEVELS.ERROR]: '❌',
-        [LOG_LEVELS.CRITICAL]: '🔥'
+        [LOG_LEVELS.CRITICAL]: '🚨'
     };
     
-    console.log(`[${log.timestamp}] ${emoji[level] || ''} ${type}: ${message}`);
-    if (data) console.log('  Data:', data);
-}
-
-async function saveLogsToFile() {
-    try {
-        await ensureDataDir();
-        const recentLogs = logs.slice(0, 1000);
-        await fs.writeFile(LOGS_FILE, JSON.stringify(recentLogs, null, 2));
-    } catch (error) {
-        console.error('Erro ao salvar logs:', error.message);
+    console.log(`[${new Date().toLocaleTimeString('pt-BR')}] ${emoji[level]} ${type}: ${message}`);
+    if (data && level !== LOG_LEVELS.DEBUG) {
+        console.log('  📎 Dados:', data);
     }
 }
 
-async function loadLogsFromFile() {
-    try {
-        const data = await fs.readFile(LOGS_FILE, 'utf8');
-        logs = JSON.parse(data);
-        addLog('LOGS_LOADED', `Logs carregados: ${logs.length}`, null, LOG_LEVELS.INFO);
-    } catch (error) {
-        addLog('LOGS_LOAD_ERROR', 'Sem logs anteriores', null, LOG_LEVELS.DEBUG);
+// ============ FUNÇÕES AUXILIARES ============
+function formatPhone(phone) {
+    if (!phone) return null;
+    phone = phone.replace(/\D/g, '');
+    if (phone.startsWith('55') && phone.length === 13) {
+        return phone;
     }
+    if (phone.length === 11) {
+        return '55' + phone;
+    }
+    return phone;
 }
 
-// ============ SISTEMA DE LOCK ============
-async function acquireWebhookLock(phoneKey, timeout = 10000) {
-    const startTime = Date.now();
-    let attempts = 0;
-    
-    while (webhookLocks.get(phoneKey)) {
-        attempts++;
-        if (Date.now() - startTime > timeout) {
-            addLog('WEBHOOK_LOCK_TIMEOUT', `Timeout após ${attempts} tentativas`, 
-                { phoneKey, waitTime: timeout }, LOG_LEVELS.WARNING);
-            return false;
-        }
-        await new Promise(resolve => setTimeout(resolve, 100));
-    }
-    
-    webhookLocks.set(phoneKey, { 
-        acquired: Date.now(), 
-        stack: new Error().stack 
-    });
-    
-    addLog('WEBHOOK_LOCK_ACQUIRED', `Lock adquirido (tentativas: ${attempts})`, 
-        { phoneKey }, LOG_LEVELS.DEBUG);
-    return true;
+function generateConversationId() {
+    return uuidv4();
 }
 
-function releaseWebhookLock(phoneKey) {
-    const lock = webhookLocks.get(phoneKey);
-    webhookLocks.delete(phoneKey);
-    
-    if (lock) {
-        const duration = Date.now() - lock.acquired;
-        addLog('WEBHOOK_LOCK_RELEASED', `Lock liberado após ${duration}ms`, 
-            { phoneKey, duration }, LOG_LEVELS.DEBUG);
-    }
-}
-
-// ============ PERSISTÊNCIA DE DADOS ============
+// ============ CARREGAMENTO E SALVAMENTO ============
 async function ensureDataDir() {
+    const dataDir = path.join(__dirname, 'data');
     try {
-        await fs.mkdir(path.join(__dirname, 'data'), { recursive: true });
-    } catch (error) {
-        console.log('Pasta data já existe');
-    }
-}
-
-async function saveFunnelsToFile() {
-    try {
-        await ensureDataDir();
-        const funnelsArray = Array.from(funis.values());
-        await fs.writeFile(DATA_FILE, JSON.stringify(funnelsArray, null, 2));
-        addLog('DATA_SAVE', `Funis salvos: ${funnelsArray.length}`, null, LOG_LEVELS.DEBUG);
-    } catch (error) {
-        addLog('DATA_SAVE_ERROR', `Erro: ${error.message}`, null, LOG_LEVELS.ERROR);
+        await fs.access(dataDir);
+    } catch {
+        await fs.mkdir(dataDir, { recursive: true });
+        console.log('📁 Pasta data criada');
     }
 }
 
 async function loadFunnelsFromFile() {
     try {
+        await ensureDataDir();
         const data = await fs.readFile(DATA_FILE, 'utf8');
-        const funnelsArray = JSON.parse(data);
+        const funnelData = JSON.parse(data);
         funis.clear();
-        funnelsArray.forEach(funnel => {
-            if (funnel.id.startsWith('CS_') || funnel.id.startsWith('FB_') || funnel.id.startsWith('PHRASE_')) {
-                funis.set(funnel.id, funnel);
-            }
+        
+        Object.values(defaultFunnels).forEach(funnel => {
+            funis.set(funnel.id, funnel);
         });
-        addLog('DATA_LOAD', `Funis carregados: ${funis.size}`, null, LOG_LEVELS.INFO);
-        return true;
-    } catch (error) {
-        addLog('DATA_LOAD_ERROR', 'Usando funis padrão', null, LOG_LEVELS.WARNING);
-        return false;
-    }
-}
-
-async function savePhrasesToFile() {
-    try {
-        await ensureDataDir();
-        const phrasesArray = Array.from(phraseTriggers.entries()).map(([phrase, data]) => ({
-            phrase,
-            funnelId: data.funnelId,
-            active: data.active,
-            triggerCount: data.triggerCount
-        }));
-        await fs.writeFile(PHRASES_FILE, JSON.stringify(phrasesArray, null, 2));
-        addLog('PHRASES_SAVE', `Frases salvas: ${phrasesArray.length}`, null, LOG_LEVELS.DEBUG);
-    } catch (error) {
-        addLog('PHRASES_SAVE_ERROR', `Erro: ${error.message}`, null, LOG_LEVELS.ERROR);
-    }
-}
-
-async function loadPhrasesFromFile() {
-    try {
-        const data = await fs.readFile(PHRASES_FILE, 'utf8');
-        const phrasesArray = JSON.parse(data);
-        phraseTriggers.clear();
-        phrasesArray.forEach(item => {
-            phraseTriggers.set(item.phrase, {
-                funnelId: item.funnelId,
-                active: item.active !== false,
-                triggerCount: item.triggerCount || 0
+        
+        if (Array.isArray(funnelData)) {
+            funnelData.forEach(funnel => {
+                if (funnel.id) {
+                    funis.set(funnel.id, funnel);
+                }
             });
-        });
-        addLog('PHRASES_LOAD', `Frases carregadas: ${phraseTriggers.size}`, null, LOG_LEVELS.INFO);
-        return true;
-    } catch (error) {
-        addLog('PHRASES_LOAD_ERROR', 'Nenhuma frase cadastrada', null, LOG_LEVELS.DEBUG);
-        return false;
-    }
-}
-
-async function saveManualTriggersToFile() {
-    try {
-        await ensureDataDir();
-        const triggersArray = Array.from(manualTriggers.entries()).map(([id, data]) => ({
-            id,
-            phrase: data.phrase,
-            funnelId: data.funnelId,
-            active: data.active,
-            triggerCount: data.triggerCount
-        }));
-        await fs.writeFile(MANUAL_TRIGGERS_FILE, JSON.stringify(triggersArray, null, 2));
-        addLog('MANUAL_TRIGGERS_SAVE', `Frases manuais salvas: ${triggersArray.length}`, null, LOG_LEVELS.DEBUG);
-    } catch (error) {
-        addLog('MANUAL_TRIGGERS_SAVE_ERROR', `Erro: ${error.message}`, null, LOG_LEVELS.ERROR);
-    }
-}
-
-async function loadManualTriggersFromFile() {
-    try {
-        const data = await fs.readFile(MANUAL_TRIGGERS_FILE, 'utf8');
-        const triggersArray = JSON.parse(data);
-        manualTriggers.clear();
-        triggersArray.forEach(item => {
-            manualTriggers.set(item.id, {
-                phrase: item.phrase,
-                funnelId: item.funnelId,
-                active: item.active !== false,
-                triggerCount: item.triggerCount || 0
+        } else if (funnelData && typeof funnelData === 'object') {
+            Object.values(funnelData).forEach(funnel => {
+                if (funnel.id) {
+                    funis.set(funnel.id, funnel);
+                }
             });
+        }
+    } catch (error) {
+        console.log('⚠️ Arquivo de funis não encontrado, usando padrão');
+        Object.values(defaultFunnels).forEach(funnel => {
+            funis.set(funnel.id, funnel);
         });
-        addLog('MANUAL_TRIGGERS_LOAD', `Frases manuais carregadas: ${manualTriggers.size}`, null, LOG_LEVELS.INFO);
-        return true;
-    } catch (error) {
-        addLog('MANUAL_TRIGGERS_LOAD_ERROR', 'Nenhuma frase manual cadastrada', null, LOG_LEVELS.DEBUG);
-        return false;
-    }
-}
-
-async function saveConversationsToFile() {
-    try {
-        await ensureDataDir();
-        const conversationsArray = Array.from(conversations.entries()).map(([key, conv]) => ({
-            key,
-            ...conv
-        }));
-        await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(conversationsArray, null, 2));
-        addLog('CONVERSATIONS_SAVE', `Conversas salvas: ${conversationsArray.length}`, null, LOG_LEVELS.DEBUG);
-    } catch (error) {
-        addLog('CONVERSATIONS_SAVE_ERROR', `Erro: ${error.message}`, null, LOG_LEVELS.ERROR);
     }
 }
 
 async function loadConversationsFromFile() {
     try {
+        await ensureDataDir();
         const data = await fs.readFile(CONVERSATIONS_FILE, 'utf8');
-        const conversationsArray = JSON.parse(data);
+        const convData = JSON.parse(data);
         conversations.clear();
         phoneIndex.clear();
-        stickyInstances.clear();
         
-        conversationsArray.forEach(item => {
-            const { key, ...conv} = item;
-            conversations.set(key, conv);
-            phoneIndex.set(conv.remoteJid, key);
-            if (conv.stickyInstance) {
-                stickyInstances.set(key, conv.stickyInstance);
+        Object.entries(convData).forEach(([id, conv]) => {
+            conversations.set(id, conv);
+            if (conv.phone) {
+                phoneIndex.set(conv.phone, id);
             }
         });
-        addLog('CONVERSATIONS_LOAD', `Conversas carregadas: ${conversations.size}`, null, LOG_LEVELS.INFO);
-        return true;
     } catch (error) {
-        addLog('CONVERSATIONS_LOAD_ERROR', 'Nenhuma conversa anterior', null, LOG_LEVELS.DEBUG);
-        return false;
+        console.log('⚠️ Arquivo de conversas não encontrado, iniciando vazio');
     }
 }
 
-// 🚀 ============ CAMPANHAS - PERSISTÊNCIA ============
-async function saveCampaignsToFile() {
+async function loadPhrasesFromFile() {
     try {
         await ensureDataDir();
-        const campaignsArray = Array.from(campaigns.entries()).map(([id, campaign]) => ({
-            id,
-            ...campaign,
-            instances: Array.from(campaignInstances.get(id) || new Map()).map(([inst, data]) => ({
-                instance: inst,
-                ...data
-            }))
-        }));
-        await fs.writeFile(CAMPAIGNS_FILE, JSON.stringify(campaignsArray, null, 2));
-        addLog('CAMPAIGNS_SAVE', `Campanhas salvas: ${campaignsArray.length}`, null, LOG_LEVELS.DEBUG);
+        const data = await fs.readFile(PHRASES_FILE, 'utf8');
+        const phraseData = JSON.parse(data);
+        phraseTriggers.clear();
+        
+        Object.entries(phraseData).forEach(([phrase, trigger]) => {
+            phraseTriggers.set(phrase, trigger);
+        });
     } catch (error) {
-        addLog('CAMPAIGNS_SAVE_ERROR', `Erro: ${error.message}`, null, LOG_LEVELS.ERROR);
+        console.log('⚠️ Arquivo de frases não encontrado, iniciando vazio');
+    }
+}
+
+async function loadManualTriggersFromFile() {
+    try {
+        await ensureDataDir();
+        const data = await fs.readFile(MANUAL_TRIGGERS_FILE, 'utf8');
+        const triggerData = JSON.parse(data);
+        manualTriggers.clear();
+        
+        Object.entries(triggerData).forEach(([id, trigger]) => {
+            manualTriggers.set(id, trigger);
+        });
+    } catch (error) {
+        console.log('⚠️ Arquivo de triggers manuais não encontrado, iniciando vazio');
     }
 }
 
 async function loadCampaignsFromFile() {
     try {
+        await ensureDataDir();
         const data = await fs.readFile(CAMPAIGNS_FILE, 'utf8');
-        const campaignsArray = JSON.parse(data);
+        const campaignData = JSON.parse(data);
         campaigns.clear();
         campaignInstances.clear();
         
-        campaignsArray.forEach(item => {
-            const { id, instances, ...campaign } = item;
+        Object.entries(campaignData).forEach(([id, campaign]) => {
             campaigns.set(id, campaign);
-            
-            // Restaurar estado das instâncias
-            const instancesMap = new Map();
-            if (instances) {
-                instances.forEach(inst => {
-                    const { instance, ...data } = inst;
-                    instancesMap.set(instance, data);
-                });
+            if (campaign.instancesState) {
+                campaignInstances.set(id, new Map(Object.entries(campaign.instancesState)));
             }
-            campaignInstances.set(id, instancesMap);
         });
-        
-        addLog('CAMPAIGNS_LOAD', `Campanhas carregadas: ${campaigns.size}`, null, LOG_LEVELS.INFO);
-        return true;
     } catch (error) {
-        addLog('CAMPAIGNS_LOAD_ERROR', 'Nenhuma campanha anterior', null, LOG_LEVELS.DEBUG);
-        return false;
+        console.log('⚠️ Arquivo de campanhas não encontrado, iniciando vazio');
     }
 }
 
-// 🚀 ============ CAMPANHAS - FUNÇÕES AUXILIARES ============
-
-// Gera intervalo aleatório entre MIN e MAX
-function getRandomInterval() {
-    const min = CAMPAIGN_CONFIG.MIN_INTERVAL;
-    const max = CAMPAIGN_CONFIG.MAX_INTERVAL;
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-// Verifica se está dentro do horário permitido (Timezone Brasília)
-function isWithinWorkingHours(startHour, endHour) {
-    const now = new Date();
-    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: CAMPAIGN_CONFIG.TIMEZONE }));
-    const currentHour = brasiliaTime.getHours();
-    return currentHour >= startHour && currentHour < endHour;
-}
-
-// Calcula próximo horário válido (Timezone Brasília)
-function getNextValidTime(startHour, endHour) {
-    const now = new Date();
-    const brasiliaTime = new Date(now.toLocaleString('en-US', { timeZone: CAMPAIGN_CONFIG.TIMEZONE }));
-    const currentHour = brasiliaTime.getHours();
-    
-    // Se está antes do horário, agenda para o startHour de hoje
-    if (currentHour < startHour) {
-        const next = new Date(brasiliaTime);
-        next.setHours(startHour, 0, 0, 0);
-        return next.getTime() - brasiliaTime.getTime();
+async function loadLogsFromFile() {
+    try {
+        await ensureDataDir();
+        const data = await fs.readFile(LOGS_FILE, 'utf8');
+        logs = JSON.parse(data);
+        if (!Array.isArray(logs)) logs = [];
+    } catch (error) {
+        console.log('⚠️ Arquivo de logs não encontrado, iniciando vazio');
     }
-    
-    // Se está depois do horário, agenda para o startHour de amanhã
-    if (currentHour >= endHour) {
-        const next = new Date(brasiliaTime);
-        next.setDate(next.getDate() + 1);
-        next.setHours(startHour, 0, 0, 0);
-        return next.getTime() - brasiliaTime.getTime();
-    }
-    
-    // Está dentro do horário
-    return 0;
 }
 
-// Valida número de telefone
-function validatePhoneNumber(phone) {
-    const cleaned = String(phone).replace(/\D/g, '');
-    
-    // Deve ter DDI + DDD + número (mínimo 12 dígitos)
-    if (cleaned.length < 12 || cleaned.length > 15) {
-        return null;
+async function saveData() {
+    try {
+        await ensureDataDir();
+        
+        const funnelArray = Array.from(funis.values());
+        await fs.writeFile(DATA_FILE, JSON.stringify(funnelArray, null, 2));
+        
+        const convObject = {};
+        conversations.forEach((conv, id) => {
+            convObject[id] = conv;
+        });
+        await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(convObject, null, 2));
+        
+        const phraseObject = {};
+        phraseTriggers.forEach((trigger, phrase) => {
+            phraseObject[phrase] = trigger;
+        });
+        await fs.writeFile(PHRASES_FILE, JSON.stringify(phraseObject, null, 2));
+        
+        const manualObject = {};
+        manualTriggers.forEach((trigger, id) => {
+            manualObject[id] = trigger;
+        });
+        await fs.writeFile(MANUAL_TRIGGERS_FILE, JSON.stringify(manualObject, null, 2));
+        
+        const campaignObject = {};
+        campaigns.forEach((campaign, id) => {
+            const instanceState = campaignInstances.get(id);
+            if (instanceState) {
+                campaign.instancesState = Object.fromEntries(instanceState.entries());
+            }
+            campaignObject[id] = campaign;
+        });
+        await fs.writeFile(CAMPAIGNS_FILE, JSON.stringify(campaignObject, null, 2));
+        
+        await fs.writeFile(LOGS_FILE, JSON.stringify(logs.slice(0, 5000), null, 2));
+    } catch (error) {
+        console.error('❌ Erro ao salvar dados:', error);
+        addLog('error', 'Erro ao salvar dados', { error: error.message }, LOG_LEVELS.CRITICAL);
     }
-    
-    return cleaned;
 }
 
-// Reseta contadores diários (chamado à meia-noite)
-function resetDailyCounters() {
-    campaigns.forEach((campaign, campaignId) => {
-        const instances = campaignInstances.get(campaignId);
-        if (instances) {
-            instances.forEach((data, instance) => {
-                data.sentToday = 0;
-                data.todayResetAt = new Date().toISOString();
+// ============ FUNÇÕES DO EVOLUTION ============
+async function sendMessage(instanceName, phone, text, mediaUrl = null) {
+    try {
+        const formattedPhone = formatPhone(phone);
+        if (!formattedPhone) {
+            throw new Error('Telefone inválido');
+        }
+
+        let messageData = {
+            number: formattedPhone,
+            textMessage: { text }
+        };
+
+        if (mediaUrl) {
+            const extension = mediaUrl.split('.').pop().toLowerCase();
+            const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            const videoExtensions = ['mp4', 'avi', 'mov', 'wmv', 'webm'];
+            const audioExtensions = ['mp3', 'wav', 'ogg', 'm4a', 'aac'];
+            
+            if (imageExtensions.includes(extension)) {
+                messageData = {
+                    number: formattedPhone,
+                    mediaMessage: {
+                        mediatype: 'image',
+                        media: mediaUrl,
+                        caption: text
+                    }
+                };
+            } else if (videoExtensions.includes(extension)) {
+                messageData = {
+                    number: formattedPhone,
+                    mediaMessage: {
+                        mediatype: 'video',
+                        media: mediaUrl,
+                        caption: text
+                    }
+                };
+            } else if (audioExtensions.includes(extension)) {
+                messageData = {
+                    number: formattedPhone,
+                    audioMessage: {
+                        audio: mediaUrl
+                    }
+                };
+                if (text) {
+                    await sendMessage(instanceName, phone, text);
+                }
+            }
+        }
+
+        const response = await axios.post(
+            `${EVOLUTION_BASE_URL}/message/sendText/${instanceName}`,
+            messageData,
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': EVOLUTION_API_KEY
+                }
+            }
+        );
+
+        return response.data;
+    } catch (error) {
+        console.error(`❌ Erro ao enviar mensagem para ${phone}:`, error.message);
+        throw error;
+    }
+}
+
+async function sendTypingIndicator(instanceName, phone, duration = 3) {
+    try {
+        const formattedPhone = formatPhone(phone);
+        if (!formattedPhone) return;
+
+        await axios.post(
+            `${EVOLUTION_BASE_URL}/chat/sendPresence/${instanceName}`,
+            {
+                number: formattedPhone,
+                delay: duration * 1000,
+                presence: 'composing'
+            },
+            {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': EVOLUTION_API_KEY
+                }
+            }
+        );
+    } catch (error) {
+        console.error('⚠️ Erro ao enviar indicador de digitação:', error.message);
+    }
+}
+
+// ============ PROCESSAMENTO DE FUNIL ============
+async function processFunnelStep(instanceName, phone, funnel, stepIndex = 0, conversationId) {
+    if (!funnel || !funnel.steps || stepIndex >= funnel.steps.length) {
+        addLog('funnel', 'Funil concluído', { 
+            funnelId: funnel?.id, 
+            phone, 
+            totalSteps: funnel?.steps?.length 
+        });
+        return;
+    }
+
+    const step = funnel.steps[stepIndex];
+    const conversation = conversations.get(conversationId);
+    
+    if (!conversation || conversation.status !== 'active') {
+        addLog('funnel', 'Conversa não está mais ativa', { conversationId, phone });
+        return;
+    }
+
+    try {
+        if (step.delayBefore && step.delayBefore > 0) {
+            await new Promise(resolve => setTimeout(resolve, step.delayBefore * 1000));
+        }
+
+        if (step.type === 'delay') {
+            const delayMs = (step.delaySeconds || 10) * 1000;
+            addLog('funnel', `Aguardando ${step.delaySeconds}s`, { funnelId: funnel.id, phone });
+            
+            setTimeout(() => {
+                processFunnelStep(instanceName, phone, funnel, stepIndex + 1, conversationId);
+            }, delayMs);
+            return;
+        }
+
+        if (step.showTyping) {
+            await sendTypingIndicator(instanceName, phone, 3);
+        }
+
+        if (step.type === 'text' || step.type === 'image' || step.type === 'video' || step.type === 'audio') {
+            await sendMessage(instanceName, phone, step.text, step.mediaUrl);
+            
+            conversation.messagesCount++;
+            conversation.lastMessageAt = new Date().toISOString();
+            await saveData();
+            
+            addLog('message', 'Mensagem enviada', {
+                type: step.type,
+                phone,
+                funnelId: funnel.id,
+                stepIndex
             });
         }
-    });
-    saveCampaignsToFile();
-    addLog('CAMPAIGNS_DAILY_RESET', 'Contadores diários resetados', null, LOG_LEVELS.INFO);
+
+        if (step.waitForReply) {
+            conversation.waitingForReply = true;
+            conversation.currentFunnelStep = stepIndex + 1;
+            await saveData();
+            addLog('funnel', 'Aguardando resposta do cliente', { phone, funnelId: funnel.id });
+        } else {
+            setTimeout(() => {
+                processFunnelStep(instanceName, phone, funnel, stepIndex + 1, conversationId);
+            }, 1000);
+        }
+
+    } catch (error) {
+        addLog('error', 'Erro ao processar step do funil', {
+            error: error.message,
+            funnelId: funnel.id,
+            stepIndex,
+            phone
+        }, LOG_LEVELS.ERROR);
+        
+        conversation.status = 'error';
+        conversation.errorMessage = error.message;
+        await saveData();
+    }
 }
 
-// Agenda reset diário à meia-noite
+// ============ PROCESSAMENTO DE WEBHOOK ============
+async function processKirvanoWebhook(eventType, order, productType) {
+    const phone = formatPhone(order.customer?.phone);
+    
+    if (!phone) {
+        addLog('webhook', 'Telefone inválido no pedido', { orderId: order.id }, LOG_LEVELS.WARNING);
+        return { success: false, error: 'Telefone inválido' };
+    }
+
+    const conversationId = phoneIndex.get(phone) || generateConversationId();
+    
+    if (!conversations.has(conversationId)) {
+        conversations.set(conversationId, {
+            id: conversationId,
+            phone,
+            customerName: order.customer?.name || 'Cliente',
+            startedAt: new Date().toISOString(),
+            status: 'active',
+            messagesCount: 0,
+            orders: []
+        });
+        phoneIndex.set(phone, conversationId);
+    }
+
+    const conversation = conversations.get(conversationId);
+    conversation.orders.push({
+        id: order.id,
+        type: eventType,
+        product: productType,
+        timestamp: new Date().toISOString()
+    });
+
+    const manualTrigger = Array.from(manualTriggers.values()).find(t => 
+        t.eventType === eventType && t.productType === productType && t.active
+    );
+
+    if (manualTrigger) {
+        const funnel = funis.get(manualTrigger.funnelId);
+        if (funnel && funnel.steps && funnel.steps.length > 0) {
+            const instanceIndex = (lastSuccessfulInstanceIndex + 1) % INSTANCES.length;
+            const selectedInstance = INSTANCES[instanceIndex];
+            lastSuccessfulInstanceIndex = instanceIndex;
+
+            stickyInstances.set(phone, selectedInstance);
+            
+            addLog('webhook', `Trigger manual ativado: ${manualTrigger.name}`, {
+                phone,
+                eventType,
+                productType,
+                funnelId: manualTrigger.funnelId,
+                instance: selectedInstance
+            });
+
+            setTimeout(() => {
+                processFunnelStep(selectedInstance, phone, funnel, 0, conversationId);
+            }, 1000);
+
+            await saveData();
+            return { 
+                success: true, 
+                funnelId: manualTrigger.funnelId, 
+                instance: selectedInstance,
+                triggerType: 'manual',
+                triggerName: manualTrigger.name
+            };
+        }
+    }
+
+    let funnelId = null;
+    if (eventType === 'order_approved') {
+        funnelId = productType === 'FB' ? 'FB_APROVADA' : 'CS_APROVADA';
+    } else if (eventType === 'order_pending') {
+        funnelId = productType === 'FB' ? 'FB_PIX' : 'CS_PIX';
+        
+        if (pixTimeouts.has(phone)) {
+            clearTimeout(pixTimeouts.get(phone));
+        }
+
+        const timeout = setTimeout(() => {
+            pixTimeouts.delete(phone);
+            addLog('pix', 'PIX expirado', { phone }, LOG_LEVELS.WARNING);
+        }, PIX_TIMEOUT);
+
+        pixTimeouts.set(phone, timeout);
+    } else if (eventType === 'order_cancelled') {
+        if (pixTimeouts.has(phone)) {
+            clearTimeout(pixTimeouts.get(phone));
+            pixTimeouts.delete(phone);
+        }
+        
+        conversation.status = 'cancelled';
+        await saveData();
+        
+        addLog('webhook', 'Pedido cancelado', { phone, orderId: order.id });
+        return { success: true, message: 'Pedido cancelado' };
+    }
+
+    if (funnelId) {
+        const funnel = funis.get(funnelId);
+        if (funnel && funnel.steps && funnel.steps.length > 0) {
+            const instanceIndex = (lastSuccessfulInstanceIndex + 1) % INSTANCES.length;
+            const selectedInstance = INSTANCES[instanceIndex];
+            lastSuccessfulInstanceIndex = instanceIndex;
+
+            stickyInstances.set(phone, selectedInstance);
+            
+            addLog('webhook', `Funil automático: ${funnel.name}`, {
+                phone,
+                eventType,
+                funnelId,
+                instance: selectedInstance
+            });
+
+            setTimeout(() => {
+                processFunnelStep(selectedInstance, phone, funnel, 0, conversationId);
+            }, 1000);
+
+            await saveData();
+            return { 
+                success: true, 
+                funnelId, 
+                instance: selectedInstance,
+                triggerType: 'automatic'
+            };
+        }
+    }
+
+    addLog('webhook', 'Nenhum funil configurado para este evento', {
+        eventType,
+        productType
+    }, LOG_LEVELS.WARNING);
+
+    await saveData();
+    return { success: false, error: 'Nenhum funil configurado' };
+}
+
+async function processWhatsAppMessage(data) {
+    const phone = data.remoteJid?.replace('@s.whatsapp.net', '');
+    const message = data.message?.conversation || 
+                   data.message?.extendedTextMessage?.text || '';
+    
+    if (!phone || !message) return;
+
+    const conversationId = phoneIndex.get(phone);
+    if (!conversationId) {
+        const normalizedMessage = message.toLowerCase().trim();
+        const trigger = phraseTriggers.get(normalizedMessage);
+        
+        if (trigger && trigger.active) {
+            const cooldownKey = `${phone}_${normalizedMessage}`;
+            const lastUsed = phraseCooldowns.get(cooldownKey);
+            
+            if (lastUsed && Date.now() - lastUsed < PHRASE_COOLDOWN) {
+                const remainingTime = Math.ceil((PHRASE_COOLDOWN - (Date.now() - lastUsed)) / 1000 / 60 / 60);
+                addLog('phrase', `Frase em cooldown: ${remainingTime}h restantes`, {
+                    phone,
+                    phrase: normalizedMessage
+                }, LOG_LEVELS.INFO);
+                return;
+            }
+            
+            const funnel = funis.get(trigger.funnelId);
+            if (funnel && funnel.steps && funnel.steps.length > 0) {
+                const newConversationId = generateConversationId();
+                const instanceIndex = (lastSuccessfulInstanceIndex + 1) % INSTANCES.length;
+                const selectedInstance = INSTANCES[instanceIndex];
+                lastSuccessfulInstanceIndex = instanceIndex;
+                
+                conversations.set(newConversationId, {
+                    id: newConversationId,
+                    phone,
+                    customerName: data.pushName || 'Cliente',
+                    startedAt: new Date().toISOString(),
+                    status: 'active',
+                    messagesCount: 0,
+                    triggeredBy: 'phrase',
+                    triggerPhrase: normalizedMessage
+                });
+                
+                phoneIndex.set(phone, newConversationId);
+                stickyInstances.set(phone, selectedInstance);
+                phraseCooldowns.set(cooldownKey, Date.now());
+                
+                addLog('phrase', `Frase-chave ativada: "${normalizedMessage}"`, {
+                    phone,
+                    funnelId: trigger.funnelId,
+                    instance: selectedInstance
+                });
+                
+                setTimeout(() => {
+                    processFunnelStep(selectedInstance, phone, funnel, 0, newConversationId);
+                }, 1000);
+                
+                await saveData();
+            }
+        }
+        
+        return;
+    }
+
+    const conversation = conversations.get(conversationId);
+    if (conversation && conversation.waitingForReply) {
+        conversation.waitingForReply = false;
+        conversation.lastReply = message;
+        conversation.lastReplyAt = new Date().toISOString();
+        
+        const instance = stickyInstances.get(phone) || INSTANCES[0];
+        const funnelId = conversation.currentFunnelId || 
+                        conversation.orders?.[conversation.orders.length - 1]?.funnelId;
+        
+        if (funnelId) {
+            const funnel = funis.get(funnelId);
+            if (funnel && conversation.currentFunnelStep < funnel.steps.length) {
+                addLog('conversation', 'Cliente respondeu, continuando funil', {
+                    phone,
+                    message: message.substring(0, 50),
+                    funnelId,
+                    nextStep: conversation.currentFunnelStep
+                });
+                
+                setTimeout(() => {
+                    processFunnelStep(instance, phone, funnel, conversation.currentFunnelStep, conversationId);
+                }, 1000);
+            }
+        }
+        
+        await saveData();
+    }
+}
+
+// ============ CAMPANHAS ============
+function isWithinBusinessHours(startHour, endHour) {
+    const now = new Date();
+    const hour = now.getHours();
+    return hour >= startHour && hour < endHour;
+}
+
+function getRandomInterval() {
+    return Math.floor(Math.random() * (CAMPAIGN_CONFIG.MAX_INTERVAL - CAMPAIGN_CONFIG.MIN_INTERVAL)) + 
+           CAMPAIGN_CONFIG.MIN_INTERVAL;
+}
+
+async function sendCampaignMessage(campaign, contact, instanceName) {
+    try {
+        const funnel = funis.get(campaign.funnelId);
+        if (!funnel || !funnel.steps || funnel.steps.length === 0) {
+            throw new Error('Funil inválido ou vazio');
+        }
+        
+        const conversationId = generateConversationId();
+        conversations.set(conversationId, {
+            id: conversationId,
+            phone: contact.phone,
+            customerName: contact.name || 'Cliente',
+            startedAt: new Date().toISOString(),
+            status: 'active',
+            messagesCount: 0,
+            campaignId: campaign.id,
+            triggeredBy: 'campaign'
+        });
+        
+        phoneIndex.set(contact.phone, conversationId);
+        stickyInstances.set(contact.phone, instanceName);
+        
+        await processFunnelStep(instanceName, contact.phone, funnel, 0, conversationId);
+        
+        return { success: true };
+    } catch (error) {
+        console.error(`Erro ao enviar mensagem de campanha:`, error);
+        return { success: false, error: error.message };
+    }
+}
+
+async function processCampaignQueue(campaignId) {
+    const campaign = campaigns.get(campaignId);
+    if (!campaign || campaign.status !== 'active') return;
+    
+    if (!isWithinBusinessHours(campaign.startHour, campaign.endHour)) {
+        const nextCheck = 60 * 60 * 1000; // Verifica novamente em 1 hora
+        campaignTimers.set(campaignId, setTimeout(() => {
+            processCampaignQueue(campaignId);
+        }, nextCheck));
+        return;
+    }
+    
+    const instances = campaignInstances.get(campaignId);
+    if (!instances) return;
+    
+    let hasMoreContacts = false;
+    
+    for (const [instanceName, instanceState] of instances) {
+        if (instanceState.status !== 'active') continue;
+        if (instanceState.dailySent >= campaign.dailyLimit) continue;
+        
+        const nextIndex = instanceState.lastProcessedIndex + 1;
+        if (nextIndex >= instanceState.contacts.length) continue;
+        
+        hasMoreContacts = true;
+        const contact = instanceState.contacts[nextIndex];
+        
+        const result = await sendCampaignMessage(campaign, contact, instanceName);
+        
+        if (result.success) {
+            instanceState.dailySent++;
+            instanceState.lastProcessedIndex = nextIndex;
+            instanceState.consecutiveErrors = 0;
+            campaign.stats.sent++;
+            
+            addLog('CAMPAIGN_MESSAGE_SENT', 
+                `Mensagem enviada: ${contact.phone}`, 
+                { 
+                    campaignId, 
+                    instanceName, 
+                    contactIndex: nextIndex,
+                    dailyCount: instanceState.dailySent 
+                },
+                LOG_LEVELS.INFO
+            );
+        } else {
+            instanceState.consecutiveErrors++;
+            campaign.stats.errors++;
+            
+            if (instanceState.consecutiveErrors >= CAMPAIGN_CONFIG.MAX_CONSECUTIVE_ERRORS) {
+                instanceState.status = 'paused';
+                instanceState.pausedReason = `Pausada após ${CAMPAIGN_CONFIG.MAX_CONSECUTIVE_ERRORS} erros consecutivos`;
+                
+                addLog('CAMPAIGN_INSTANCE_PAUSED',
+                    `Instância ${instanceName} pausada por erros`,
+                    { campaignId, instanceName, errors: instanceState.consecutiveErrors },
+                    LOG_LEVELS.WARNING
+                );
+            }
+        }
+        
+        await saveData();
+        break; // Processa apenas um contato por vez
+    }
+    
+    if (!hasMoreContacts) {
+        campaign.status = 'completed';
+        campaign.completedAt = new Date().toISOString();
+        
+        addLog('CAMPAIGN_COMPLETED',
+            `Campanha concluída: ${campaign.name}`,
+            { 
+                campaignId,
+                totalSent: campaign.stats.sent,
+                totalErrors: campaign.stats.errors
+            },
+            LOG_LEVELS.INFO
+        );
+        
+        await saveData();
+        return;
+    }
+    
+    const nextInterval = getRandomInterval();
+    campaignTimers.set(campaignId, setTimeout(() => {
+        processCampaignQueue(campaignId);
+    }, nextInterval));
+    
+    addLog('CAMPAIGN_NEXT_SCHEDULED',
+        `Próximo envio em ${Math.round(nextInterval / 60000)} minutos`,
+        { campaignId, nextInterval },
+        LOG_LEVELS.DEBUG
+    );
+}
+
+function startCampaignProcessing(campaignId) {
+    const existingTimer = campaignTimers.get(campaignId);
+    if (existingTimer) {
+        clearTimeout(existingTimer);
+    }
+    
+    const initialDelay = 5000; // 5 segundos para começar
+    campaignTimers.set(campaignId, setTimeout(() => {
+        processCampaignQueue(campaignId);
+    }, initialDelay));
+}
+
 function scheduleDailyReset() {
     const now = new Date();
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
     tomorrow.setHours(0, 0, 0, 0);
     
-    const timeUntilMidnight = tomorrow.getTime() - now.getTime();
+    const msUntilMidnight = tomorrow - now;
     
     setTimeout(() => {
-        resetDailyCounters();
-        scheduleDailyReset(); // Reagenda para o próximo dia
-    }, timeUntilMidnight);
-    
-    addLog('CAMPAIGNS_SCHEDULE_RESET', `Próximo reset em ${Math.round(timeUntilMidnight / 1000 / 60)} minutos`, 
-        null, LOG_LEVELS.DEBUG);
-}
-
-// 🚀 ============ CAMPANHAS - ENVIO ============
-
-async function sendCampaignMessage(campaignId, contact, instance, funnelId) {
-    try {
-        const funnel = funis.get(funnelId);
-        if (!funnel || !funnel.steps || funnel.steps.length === 0) {
-            throw new Error('Funil não encontrado ou vazio');
-        }
-
-        const phoneKey = `campaign_${campaignId}_${contact}`;
-        const remoteJid = contact + '@s.whatsapp.net';
-
-        // Cria conversa para o funil
-        conversations.set(phoneKey, {
-            remoteJid,
-            funnelId,
-            stepIndex: 0,
-            waiting_for_response: false,
-            createdAt: new Date().toISOString(),
-            source: 'campaign',
-            campaignId,
-            stickyInstance: instance
-        });
-
-        phoneIndex.set(remoteJid, phoneKey);
-        stickyInstances.set(phoneKey, instance);
-
-        // Envia primeiro bloco do funil
-        const firstStep = funnel.steps[0];
-        await sendStep(phoneKey, firstStep, instance);
-
-        addLog('CAMPAIGN_MESSAGE_SENT', `Mensagem enviada`, {
-            campaignId,
-            contact,
-            instance,
-            funnel: funnelId
-        }, LOG_LEVELS.INFO);
-
-        return true;
-    } catch (error) {
-        addLog('CAMPAIGN_MESSAGE_ERROR', `Erro ao enviar: ${error.message}`, {
-            campaignId,
-            contact,
-            instance
-        }, LOG_LEVELS.ERROR);
-        return false;
-    }
-}
-
-// Processa fila de uma instância específica
-async function processCampaignInstance(campaignId, instance) {
-    const campaign = campaigns.get(campaignId);
-    if (!campaign || campaign.status !== 'active') {
-        return;
-    }
-
-    const instances = campaignInstances.get(campaignId);
-    const instanceData = instances.get(instance);
-
-    // Verifica se instância está pausada
-    if (instanceData.status === 'paused') {
-        addLog('CAMPAIGN_INSTANCE_PAUSED', `Instância pausada`, {
-            campaignId,
-            instance
-        }, LOG_LEVELS.WARNING);
-        return;
-    }
-
-    // Verifica limite diário
-    const maxDailyLimit = campaign.config.dailyLimit || CAMPAIGN_CONFIG.DEFAULT_DAILY_LIMIT;
-    
-    if (instanceData.sentToday >= maxDailyLimit) {
-        addLog('CAMPAIGN_DAILY_LIMIT', `Limite diário atingido`, {
-            campaignId,
-            instance,
-            sent: instanceData.sentToday,
-            limit: maxDailyLimit
-        }, LOG_LEVELS.INFO);
-        
-        // Agenda para amanhã
-        const nextDelay = getNextValidTime(campaign.config.startHour, campaign.config.endHour);
-        setTimeout(() => processCampaignInstance(campaignId, instance), nextDelay);
-        return;
-    }
-
-    // Verifica horário de trabalho
-    if (!isWithinWorkingHours(campaign.config.startHour, campaign.config.endHour)) {
-        const nextDelay = getNextValidTime(campaign.config.startHour, campaign.config.endHour);
-        addLog('CAMPAIGN_OUTSIDE_HOURS', `Fora do horário - aguardando`, {
-            campaignId,
-            instance,
-            nextIn: Math.round(nextDelay / 1000 / 60) + ' minutos'
-        }, LOG_LEVELS.DEBUG);
-        
-        setTimeout(() => processCampaignInstance(campaignId, instance), nextDelay);
-        return;
-    }
-
-    // Pega próximo contato da fila desta instância
-    const contact = instanceData.queue.shift();
-    
-    if (!contact) {
-        // Fila vazia - campanha concluída para esta instância
-        addLog('CAMPAIGN_INSTANCE_COMPLETE', `Fila vazia`, {
-            campaignId,
-            instance
-        }, LOG_LEVELS.INFO);
-        
-        // Verifica se todas as instâncias terminaram
-        let allComplete = true;
-        instances.forEach((data) => {
-            if (data.queue.length > 0) {
-                allComplete = false;
-            }
+        campaignInstances.forEach((instances, campaignId) => {
+            instances.forEach((instanceState) => {
+                instanceState.dailySent = 0;
+            });
         });
         
-        if (allComplete) {
-            campaign.status = 'completed';
-            campaign.completedAt = new Date().toISOString();
-            saveCampaignsToFile();
-            
-            addLog('CAMPAIGN_COMPLETED', `Campanha concluída`, {
-                campaignId,
-                totalSent: campaign.stats.sent
-            }, LOG_LEVELS.INFO);
-        }
+        addLog('SYSTEM_DAILY_RESET', 'Reset diário de limites de campanha executado', null, LOG_LEVELS.INFO);
+        saveData();
         
-        return;
-    }
-
-    // Envia mensagem
-    const success = await sendCampaignMessage(campaignId, contact, instance, campaign.funnelId);
-
-    if (success) {
-        // Sucesso - atualiza estatísticas
-        campaign.stats.sent++;
-        instanceData.sentToday++;
-        instanceData.totalSent++;
-        instanceData.consecutiveErrors = 0;
-        instanceData.lastSentAt = new Date().toISOString();
-        
-        addLog('CAMPAIGN_SEND_SUCCESS', `Enviado com sucesso`, {
-            campaignId,
-            instance,
-            contact,
-            sentToday: instanceData.sentToday
-        }, LOG_LEVELS.INFO);
-    } else {
-        // Erro - incrementa contador de erros
-        campaign.stats.errors++;
-        instanceData.consecutiveErrors++;
-        
-        addLog('CAMPAIGN_SEND_ERROR', `Erro no envio`, {
-            campaignId,
-            instance,
-            contact,
-            consecutiveErrors: instanceData.consecutiveErrors
-        }, LOG_LEVELS.ERROR);
-        
-        // Se atingiu limite de erros, pausa a instância
-        if (instanceData.consecutiveErrors >= CAMPAIGN_CONFIG.MAX_CONSECUTIVE_ERRORS) {
-            instanceData.status = 'paused';
-            instanceData.pausedAt = new Date().toISOString();
-            instanceData.pauseReason = 'Múltiplos erros consecutivos';
-            
-            addLog('CAMPAIGN_INSTANCE_AUTO_PAUSED', `Instância pausada automaticamente`, {
-                campaignId,
-                instance,
-                errors: instanceData.consecutiveErrors
-            }, LOG_LEVELS.CRITICAL);
-            
-            // Redistribui contato para próxima instância disponível
-            const nextInstance = findNextAvailableInstance(campaignId, instance);
-            if (nextInstance) {
-                const nextData = instances.get(nextInstance);
-                nextData.queue.unshift(contact); // Adiciona no início da fila
-                
-                addLog('CAMPAIGN_CONTACT_REDISTRIBUTED', `Contato redistribuído`, {
-                    campaignId,
-                    from: instance,
-                    to: nextInstance,
-                    contact
-                }, LOG_LEVELS.INFO);
-            } else {
-                // Nenhuma instância disponível - contato perdido
-                campaign.stats.errors++;
-                addLog('CAMPAIGN_NO_INSTANCE_AVAILABLE', `Nenhuma instância disponível`, {
-                    campaignId,
-                    contact
-                }, LOG_LEVELS.CRITICAL);
-            }
-            
-            saveCampaignsToFile();
-            return; // Para execução desta instância
-        } else {
-            // Recoloca contato no início da fila para tentar novamente
-            instanceData.queue.unshift(contact);
-        }
-    }
-
-    saveCampaignsToFile();
-
-    // Agenda próximo envio com intervalo aleatório
-    const nextInterval = getRandomInterval();
-    instanceData.nextSendAt = new Date(Date.now() + nextInterval).toISOString();
-    
-    addLog('CAMPAIGN_NEXT_SCHEDULED', `Próximo envio agendado`, {
-        campaignId,
-        instance,
-        inMinutes: Math.round(nextInterval / 1000 / 60)
-    }, LOG_LEVELS.DEBUG);
-    
-    setTimeout(() => processCampaignInstance(campaignId, instance), nextInterval);
+        scheduleDailyReset();
+    }, msUntilMidnight);
 }
 
-// Encontra próxima instância disponível (sequencial, pulando pausadas)
-function findNextAvailableInstance(campaignId, currentInstance) {
-    const campaign = campaigns.get(campaignId);
-    const instances = campaignInstances.get(campaignId);
-    if (!instances || !campaign) return null;
-    
-    const maxDailyLimit = campaign.config.dailyLimit || CAMPAIGN_CONFIG.DEFAULT_DAILY_LIMIT;
-    const instancesList = Array.from(instances.keys());
-    const currentIndex = instancesList.indexOf(currentInstance);
-    
-    // Procura a partir da próxima instância
-    for (let i = 1; i < instancesList.length; i++) {
-        const nextIndex = (currentIndex + i) % instancesList.length;
-        const nextInstance = instancesList[nextIndex];
-        const nextData = instances.get(nextInstance);
-        
-        if (nextData.status === 'active' && nextData.sentToday < maxDailyLimit) {
-            return nextInstance;
-        }
-    }
-    
-    return null;
-}
-
-// Inicia processamento da campanha
-function startCampaignProcessing(campaignId) {
-    const campaign = campaigns.get(campaignId);
-    const instances = campaignInstances.get(campaignId);
-    
-    if (!campaign || !instances) {
-        addLog('CAMPAIGN_START_ERROR', 'Campanha ou instâncias não encontradas', 
-            { campaignId }, LOG_LEVELS.ERROR);
-        return;
-    }
-    
-    addLog('CAMPAIGN_STARTED', `Iniciando processamento`, {
-        campaignId,
-        totalContacts: campaign.totalContacts,
-        instances: instances.size
-    }, LOG_LEVELS.INFO);
-    
-    // Inicia cada instância
-    instances.forEach((data, instance) => {
-        if (data.status === 'active' && data.queue.length > 0) {
-            // Adiciona delay inicial variável para cada instância
-            const initialDelay = Math.floor(Math.random() * 60000); // 0-1 minuto
-            
-            setTimeout(() => {
-                processCampaignInstance(campaignId, instance);
-            }, initialDelay);
-            
-            addLog('CAMPAIGN_INSTANCE_SCHEDULED', `Instância agendada`, {
-                campaignId,
-                instance,
-                queueSize: data.queue.length,
-                initialDelaySeconds: Math.round(initialDelay / 1000)
-            }, LOG_LEVELS.INFO);
-        }
-    });
-}
-
-// ============ ENVIO DE MENSAGENS (Kirvano + Campanhas) ============
-async function sendToEvolution(instance, endpoint, payload) {
-    const url = `${EVOLUTION_BASE_URL}${endpoint}${instance}`;
-    
-    try {
-        const response = await axios.post(url, payload, {
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': EVOLUTION_API_KEY
-            },
-            timeout: 30000
-        });
-        
-        addLog('EVOLUTION_SUCCESS', `Mensagem enviada via ${instance}`, 
-            { endpoint, instance }, LOG_LEVELS.DEBUG);
-        return response.data;
-    } catch (error) {
-        addLog('EVOLUTION_ERROR', `Erro ao enviar via ${instance}: ${error.message}`, 
-            { endpoint, instance, error: error.response?.data }, LOG_LEVELS.ERROR);
-        throw error;
-    }
-}
-
-async function sendStep(phoneKey, step, instance) {
-    const conv = conversations.get(phoneKey);
-    if (!conv) return;
-
-    const remoteJid = conv.remoteJid;
-    const number = remoteJid.replace('@s.whatsapp.net', '');
-
-    try {
-        switch (step.type) {
-            case 'text':
-                await sendToEvolution(instance, '/message/sendText/', {
-                    number,
-                    text: step.content
-                });
-                break;
-
-            case 'image':
-                await sendToEvolution(instance, '/message/sendMedia/', {
-                    number,
-                    mediatype: 'image',
-                    media: step.url,
-                    caption: step.caption || ''
-                });
-                break;
-
-            case 'video':
-                await sendToEvolution(instance, '/message/sendMedia/', {
-                    number,
-                    mediatype: 'video',
-                    media: step.url,
-                    caption: step.caption || ''
-                });
-                break;
-
-            case 'audio':
-                await sendToEvolution(instance, '/message/sendWhatsAppAudio/', {
-                    number,
-                    audio: step.url
-                });
-                break;
-
-            case 'document':
-                await sendToEvolution(instance, '/message/sendMedia/', {
-                    number,
-                    mediatype: 'document',
-                    media: step.url,
-                    fileName: step.fileName || 'documento.pdf'
-                });
-                break;
-
-            case 'delay':
-                // Não faz nada, apenas delay
-                break;
-
-            case 'wait_response':
-                conv.waiting_for_response = true;
-                conversations.set(phoneKey, conv);
-                break;
-        }
-
-        conv.lastSystemMessage = new Date().toISOString();
-        conversations.set(phoneKey, conv);
-        await saveConversationsToFile();
-
-    } catch (error) {
-        addLog('SEND_STEP_ERROR', `Erro ao enviar passo: ${error.message}`, 
-            { phoneKey, stepType: step.type }, LOG_LEVELS.ERROR);
-        throw error;
-    }
-}
-
-async function processNextStep(phoneKey) {
-    const conv = conversations.get(phoneKey);
-    if (!conv) return;
-
-    const funnel = funis.get(conv.funnelId);
-    if (!funnel || !funnel.steps) return;
-
-    conv.stepIndex++;
-
-    if (conv.stepIndex >= funnel.steps.length) {
-        conv.completed = true;
-        conversations.set(phoneKey, conv);
-        await saveConversationsToFile();
-        
-        addLog('FUNNEL_COMPLETED', 'Funil concluído', { phoneKey }, LOG_LEVELS.INFO);
-        return;
-    }
-
-    const nextStep = funnel.steps[conv.stepIndex];
-    conversations.set(phoneKey, conv);
-
-    if (nextStep.type === 'delay') {
-        const delayMs = (nextStep.seconds || 5) * 1000;
-        setTimeout(() => processNextStep(phoneKey), delayMs);
-        return;
-    }
-
-    const instance = stickyInstances.get(phoneKey) || INSTANCES[0];
-    await sendStep(phoneKey, nextStep, instance);
-
-    if (nextStep.type !== 'wait_response') {
-        setTimeout(() => processNextStep(phoneKey), 2000);
-    }
-}
-
-// ============ WEBHOOK EVOLUTION (Mensagens recebidas) ============
+// ============ ROTAS - WEBHOOKS ============
 app.post('/webhook/evolution', async (req, res) => {
     try {
-        res.status(200).json({ success: true, message: 'Recebido' });
-
-        const { data } = req.body;
-        if (!data || !data.key || !data.key.remoteJid) return;
-
-        const remoteJid = data.key.remoteJid;
-        if (!remoteJid.endsWith('@s.whatsapp.net')) return;
-
-        const messageText = data.message?.conversation || 
-                          data.message?.extendedTextMessage?.text || 
-                          '';
-
-        if (!messageText) return;
-
-        const phoneKey = phoneIndex.get(remoteJid) || remoteJid;
-
-        // Adquire lock para evitar race conditions
-        const lockAcquired = await acquireWebhookLock(phoneKey);
-        if (!lockAcquired) {
-            addLog('WEBHOOK_LOCK_FAILED', 'Lock não adquirido', { phoneKey }, LOG_LEVELS.WARNING);
-            return;
-        }
-
-        try {
-            const existingConv = conversations.get(phoneKey);
-
-            // Se já tem conversa ativa e está aguardando resposta
-            if (existingConv && existingConv.waiting_for_response) {
-                existingConv.waiting_for_response = false;
-                existingConv.lastReply = new Date().toISOString();
-                conversations.set(phoneKey, existingConv);
-                await saveConversationsToFile();
-
-                addLog('USER_REPLY', 'Resposta recebida, continuando funil', 
-                    { phoneKey }, LOG_LEVELS.INFO);
-
-                await processNextStep(phoneKey);
-                return;
-            }
-
-            // Verifica frases-chave automáticas (cliente envia)
-            const normalizedMessage = messageText.toLowerCase().trim();
+        const { event, instance, data } = req.body;
+        
+        if (event === 'messages.upsert' && data?.messageType === 'conversation') {
+            const webhookId = `${data.remoteJid}_${Date.now()}`;
             
-            for (const [phrase, triggerData] of phraseTriggers.entries()) {
-                if (!triggerData.active) continue;
-
-                if (normalizedMessage.includes(phrase)) {
-                    // Verifica cooldown de 24h
-                    const cooldownKey = `${remoteJid}_${phrase}`;
-                    const lastTrigger = phraseCooldowns.get(cooldownKey);
-                    
-                    if (lastTrigger && (Date.now() - lastTrigger) < PHRASE_COOLDOWN) {
-                        addLog('PHRASE_COOLDOWN', 'Frase em cooldown', 
-                            { phoneKey, phrase }, LOG_LEVELS.DEBUG);
-                        return;
-                    }
-
-                    // Registra cooldown
-                    phraseCooldowns.set(cooldownKey, Date.now());
-
-                    // Cria nova conversa
-                    const newPhoneKey = `phrase_${Date.now()}_${remoteJid}`;
-                    const instance = INSTANCES[Math.floor(Math.random() * INSTANCES.length)];
-
-                    conversations.set(newPhoneKey, {
-                        remoteJid,
-                        funnelId: triggerData.funnelId,
-                        stepIndex: 0,
-                        waiting_for_response: false,
-                        createdAt: new Date().toISOString(),
-                        source: 'phrase',
-                        triggerPhrase: phrase
-                    });
-
-                    phoneIndex.set(remoteJid, newPhoneKey);
-                    stickyInstances.set(newPhoneKey, instance);
-
-                    triggerData.triggerCount++;
-                    await savePhrasesToFile();
-                    await saveConversationsToFile();
-
-                    addLog('PHRASE_TRIGGERED', 'Frase detectada, disparando funil', 
-                        { phrase, funnelId: triggerData.funnelId }, LOG_LEVELS.INFO);
-
-                    await processNextStep(newPhoneKey);
-                    return;
-                }
+            if (webhookLocks.has(data.remoteJid)) {
+                return res.json({ success: true, status: 'duplicate_ignored' });
             }
-
-            // Verifica frases manuais (você envia)
-            if (data.key.fromMe) {
-                for (const [id, triggerData] of manualTriggers.entries()) {
-                    if (!triggerData.active) continue;
-
-                    if (normalizedMessage.includes(triggerData.phrase)) {
-                        const newPhoneKey = `manual_${Date.now()}_${remoteJid}`;
-                        const instance = data.key.id.split(':')[0] || INSTANCES[0];
-
-                        conversations.set(newPhoneKey, {
-                            remoteJid,
-                            funnelId: triggerData.funnelId,
-                            stepIndex: 0,
-                            waiting_for_response: false,
-                            createdAt: new Date().toISOString(),
-                            source: 'manual',
-                            triggerPhrase: triggerData.phrase
-                        });
-
-                        phoneIndex.set(remoteJid, newPhoneKey);
-                        stickyInstances.set(newPhoneKey, instance);
-
-                        triggerData.triggerCount++;
-                        await saveManualTriggersToFile();
-                        await saveConversationsToFile();
-
-                        addLog('MANUAL_TRIGGER_ACTIVATED', 'Frase manual detectada', 
-                            { phrase: triggerData.phrase, funnelId: triggerData.funnelId }, 
-                            LOG_LEVELS.INFO);
-
-                        await processNextStep(newPhoneKey);
-                        return;
-                    }
-                }
-            }
-
-        } finally {
-            releaseWebhookLock(phoneKey);
+            
+            webhookLocks.set(data.remoteJid, true);
+            setTimeout(() => webhookLocks.delete(data.remoteJid), 5000);
+            
+            await processWhatsAppMessage(data);
+            
+            return res.json({ success: true, processed: true });
         }
-
+        
+        res.json({ success: true, ignored: true });
     } catch (error) {
-        addLog('WEBHOOK_ERROR', `Erro no webhook: ${error.message}`, 
-            null, LOG_LEVELS.ERROR);
+        console.error('Erro no webhook Evolution:', error);
+        res.status(500).json({ error: error.message });
     }
 });
 
-// ============ WEBHOOK KIRVANO (Compras/PIX) ============
 app.post('/webhook/kirvano', async (req, res) => {
     try {
-        res.status(200).json({ success: true, message: 'Webhook recebido' });
-
-        const { product_id, customer, status, order } = req.body;
-
-        if (!product_id || !customer?.phone) {
-            addLog('KIRVANO_INVALID', 'Dados inválidos', req.body, LOG_LEVELS.WARNING);
-            return;
-        }
-
-        const productType = PRODUCT_MAPPING[product_id];
-        if (!productType) {
-            addLog('KIRVANO_UNKNOWN_PRODUCT', 'Produto desconhecido', 
-                { product_id }, LOG_LEVELS.WARNING);
-            return;
-        }
-
-        const phone = customer.phone.replace(/\D/g, '');
-        const remoteJid = phone + '@s.whatsapp.net';
+        const webhookData = req.body;
         
-        let funnelId;
-        if (status === 'approved') {
-            funnelId = `${productType}_APROVADA`;
-        } else if (status === 'pending' && order?.payment_method === 'pix') {
-            funnelId = `${productType}_PIX`;
-        } else {
-            addLog('KIRVANO_INVALID_STATUS', 'Status não mapeado', 
-                { status, payment_method: order?.payment_method }, LOG_LEVELS.DEBUG);
-            return;
+        addLog('webhook', 'Webhook recebido', {
+            type: webhookData.type,
+            hasOrder: !!webhookData.order,
+            hasCustomer: !!webhookData.order?.customer
+        }, LOG_LEVELS.DEBUG);
+        
+        let eventType = null;
+        if (webhookData.type === 'order_paid' || webhookData.type === 'purchase_approved') {
+            eventType = 'order_approved';
+        } else if (webhookData.type === 'purchase_pending_payment' || webhookData.type === 'order_pending') {
+            eventType = 'order_pending';
+        } else if (webhookData.type === 'purchase_cancelled' || webhookData.type === 'order_cancelled') {
+            eventType = 'order_cancelled';
         }
-
-        const funnel = funis.get(funnelId);
-        if (!funnel) {
-            addLog('KIRVANO_FUNNEL_NOT_FOUND', 'Funil não existe', 
-                { funnelId }, LOG_LEVELS.ERROR);
-            return;
-        }
-
-        // Pega instância disponível
-        let instance = INSTANCES[0];
-        lastSuccessfulInstanceIndex = (lastSuccessfulInstanceIndex + 1) % INSTANCES.length;
-        instance = INSTANCES[lastSuccessfulInstanceIndex];
-
-        const phoneKey = `kirvano_${Date.now()}_${phone}`;
-
-        conversations.set(phoneKey, {
-            remoteJid,
-            customerName: customer.name || 'Cliente',
-            productType,
-            funnelId,
-            stepIndex: 0,
-            waiting_for_response: false,
-            createdAt: new Date().toISOString(),
-            orderCode: order?.code,
-            amount: order?.amount,
-            source: 'kirvano',
-            pixWaiting: status === 'pending'
-        });
-
-        phoneIndex.set(remoteJid, phoneKey);
-        stickyInstances.set(phoneKey, instance);
-
-        await saveConversationsToFile();
-
-        addLog('KIRVANO_FUNNEL_STARTED', 'Funil iniciado', {
-            phoneKey,
-            funnelId,
-            productType,
-            customer: customer.name
-        }, LOG_LEVELS.INFO);
-
-        // PIX: agenda timeout de 7 minutos
-        if (status === 'pending') {
-            const timeoutId = setTimeout(async () => {
-                const conv = conversations.get(phoneKey);
-                if (conv && conv.pixWaiting && !conv.transferredFromPix) {
-                    addLog('PIX_TIMEOUT', 'Timeout do PIX - cancelando', 
-                        { phoneKey }, LOG_LEVELS.WARNING);
-                    conv.canceled = true;
-                    conv.pixWaiting = false;
-                    conversations.set(phoneKey, conv);
-                    await saveConversationsToFile();
-                }
-                pixTimeouts.delete(phoneKey);
-            }, PIX_TIMEOUT);
+        
+        if (eventType && webhookData.order) {
+            const order = webhookData.order;
+            const productIds = order.items?.map(item => item.product_id) || [];
+            let productType = 'CS'; // Padrão
             
-            pixTimeouts.set(phoneKey, timeoutId);
+            for (const productId of productIds) {
+                if (PRODUCT_MAPPING[productId]) {
+                    productType = PRODUCT_MAPPING[productId];
+                    break;
+                }
+            }
+            
+            const result = await processKirvanoWebhook(eventType, order, productType);
+            
+            return res.json({
+                success: true,
+                processed: result.success,
+                details: result
+            });
         }
-
-        await processNextStep(phoneKey);
-
+        
+        res.json({ 
+            success: true, 
+            ignored: true,
+            reason: 'Event type not handled or missing order data'
+        });
+        
     } catch (error) {
-        addLog('KIRVANO_WEBHOOK_ERROR', `Erro: ${error.message}`, 
-            null, LOG_LEVELS.ERROR);
+        console.error('Erro no webhook Kirvano:', error);
+        addLog('error', 'Erro no webhook Kirvano', { error: error.message }, LOG_LEVELS.ERROR);
+        res.status(500).json({ error: error.message });
     }
 });
 
-// ============ API ENDPOINTS ============
-
-// Dashboard stats
+// ============ ROTAS - API ============
 app.get('/api/stats', (req, res) => {
-    const activeCampaigns = Array.from(campaigns.values())
-        .filter(c => c.status === 'active').length;
-
-    res.json({
-        success: true,
-        data: {
-            active_conversations: conversations.size,
-            pending_pix: Array.from(conversations.values()).filter(c => c.pixWaiting).length,
-            total_funnels: funis.size,
-            total_phrases: phraseTriggers.size,
-            active_campaigns: activeCampaigns
-        }
-    });
+    const stats = {
+        totalFunnels: funis.size,
+        totalConversations: conversations.size,
+        activeConversations: Array.from(conversations.values()).filter(c => c.status === 'active').length,
+        totalInstances: INSTANCES.length,
+        totalPhrases: phraseTriggers.size,
+        activePhrases: Array.from(phraseTriggers.values()).filter(t => t.active).length,
+        totalManualTriggers: manualTriggers.size,
+        activeManualTriggers: Array.from(manualTriggers.values()).filter(t => t.active).length,
+        totalCampaigns: campaigns.size,
+        activeCampaigns: Array.from(campaigns.values()).filter(c => c.status === 'active').length
+    };
+    
+    res.json({ success: true, data: stats });
 });
 
-// Funis
 app.get('/api/funnels', (req, res) => {
-    const funnelsArray = Array.from(funis.values());
-    res.json({ success: true, data: funnelsArray });
+    const funnelList = Array.from(funis.values());
+    res.json({ success: true, data: funnelList });
 });
 
 app.get('/api/funnels/:id', (req, res) => {
     const funnel = funis.get(req.params.id);
-    if (!funnel) {
-        return res.status(404).json({ success: false, error: 'Funil não encontrado' });
+    if (funnel) {
+        res.json({ success: true, data: funnel });
+    } else {
+        res.status(404).json({ success: false, error: 'Funil não encontrado' });
     }
-    res.json({ success: true, data: funnel });
 });
 
 app.post('/api/funnels', async (req, res) => {
-    const { id, name, steps } = req.body;
-    
-    if (!id || !name) {
-        return res.status(400).json({ success: false, error: 'Dados inválidos' });
+    try {
+        const funnel = req.body;
+        if (!funnel.id || !funnel.name) {
+            return res.status(400).json({ success: false, error: 'ID e nome são obrigatórios' });
+        }
+        
+        funis.set(funnel.id, funnel);
+        await saveData();
+        
+        addLog('funnel', `Funil criado: ${funnel.name}`, funnel);
+        res.json({ success: true, data: funnel });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    funis.set(id, { id, name, steps: steps || [] });
-    await saveFunnelsToFile();
-    
-    addLog('FUNNEL_CREATED', `Funil criado: ${name}`, { id }, LOG_LEVELS.INFO);
-    res.json({ success: true, message: 'Funil criado', data: { id, name } });
 });
 
 app.put('/api/funnels/:id', async (req, res) => {
-    const { id } = req.params;
-    const { name, steps } = req.body;
-    
-    const funnel = funis.get(id);
-    if (!funnel) {
-        return res.status(404).json({ success: false, error: 'Funil não encontrado' });
+    try {
+        const funnelId = req.params.id;
+        const updatedFunnel = req.body;
+        
+        if (!funis.has(funnelId)) {
+            return res.status(404).json({ success: false, error: 'Funil não encontrado' });
+        }
+        
+        funis.set(funnelId, { ...updatedFunnel, id: funnelId });
+        await saveData();
+        
+        addLog('funnel', `Funil atualizado: ${updatedFunnel.name}`, updatedFunnel);
+        res.json({ success: true, data: updatedFunnel });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    if (name) funnel.name = name;
-    if (steps) funnel.steps = steps;
-    
-    funis.set(id, funnel);
-    await saveFunnelsToFile();
-    
-    addLog('FUNNEL_UPDATED', `Funil atualizado: ${funnel.name}`, { id }, LOG_LEVELS.INFO);
-    res.json({ success: true, message: 'Funil atualizado' });
 });
 
-// Frases-chave
+// NOVAS ROTAS PARA IMPORTAR/EXPORTAR/DELETAR FUNIS
+app.post('/api/funnels/import', async (req, res) => {
+    try {
+        const { funnels: importedFunnels } = req.body;
+        
+        if (!importedFunnels || !Array.isArray(importedFunnels)) {
+            return res.json({ 
+                success: false, 
+                error: 'Formato de arquivo inválido' 
+            });
+        }
+        
+        let imported = 0;
+        let skipped = 0;
+        
+        for (const funnel of importedFunnels) {
+            if (funnel.id && funnel.name) {
+                // Valida estrutura do funil
+                if (!funnel.steps) funnel.steps = [];
+                if (!Array.isArray(funnel.steps)) funnel.steps = [];
+                
+                funis.set(funnel.id, funnel);
+                imported++;
+                
+                addLog('funnel', `Funil importado: ${funnel.name}`, funnel);
+            } else {
+                skipped++;
+            }
+        }
+        
+        await saveData();
+        
+        res.json({ 
+            success: true, 
+            imported,
+            skipped,
+            message: `${imported} funis importados com sucesso!`
+        });
+        
+    } catch (error) {
+        console.error('Erro ao importar funis:', error);
+        addLog('error', 'Erro ao importar funis', { error: error.message }, LOG_LEVELS.ERROR);
+        res.json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+app.get('/api/funnels/export', (req, res) => {
+    try {
+        const exportData = {
+            version: '1.0',
+            exportDate: new Date().toISOString(),
+            funnels: Array.from(funis.values())
+        };
+        
+        res.json({
+            success: true,
+            data: exportData
+        });
+        
+        addLog('funnel', 'Funis exportados', { count: funis.size });
+    } catch (error) {
+        console.error('Erro ao exportar funis:', error);
+        res.json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+app.delete('/api/funnels/:id', async (req, res) => {
+    try {
+        const funnelId = req.params.id;
+        
+        if (!funis.has(funnelId)) {
+            return res.json({ 
+                success: false, 
+                error: 'Funil não encontrado' 
+            });
+        }
+        
+        // Verifica se é um funil padrão
+        if (defaultFunnels[funnelId]) {
+            return res.json({ 
+                success: false, 
+                error: 'Não é possível deletar funis padrão do sistema' 
+            });
+        }
+        
+        const funnelName = funis.get(funnelId).name;
+        funis.delete(funnelId);
+        
+        // Remove frases associadas
+        const phrasesToDelete = [];
+        phraseTriggers.forEach((trigger, phrase) => {
+            if (trigger.funnelId === funnelId) {
+                phrasesToDelete.push(phrase);
+            }
+        });
+        
+        phrasesToDelete.forEach(phrase => {
+            phraseTriggers.delete(phrase);
+        });
+        
+        // Remove triggers manuais associados
+        const triggersToDelete = [];
+        manualTriggers.forEach((trigger, id) => {
+            if (trigger.funnelId === funnelId) {
+                triggersToDelete.push(id);
+            }
+        });
+        
+        triggersToDelete.forEach(id => {
+            manualTriggers.delete(id);
+        });
+        
+        await saveData();
+        
+        res.json({ 
+            success: true,
+            message: `Funil "${funnelName}" deletado com sucesso!`,
+            deletedPhrases: phrasesToDelete.length,
+            deletedTriggers: triggersToDelete.length
+        });
+        
+        addLog('funnel', `Funil deletado: ${funnelName}`, { 
+            funnelId,
+            phrasesRemoved: phrasesToDelete.length,
+            triggersRemoved: triggersToDelete.length
+        });
+        
+    } catch (error) {
+        console.error('Erro ao deletar funil:', error);
+        res.json({ 
+            success: false, 
+            error: error.message 
+        });
+    }
+});
+
+// ============ ROTAS - FRASES ============
 app.get('/api/phrases', (req, res) => {
-    const phrasesArray = Array.from(phraseTriggers.entries()).map(([phrase, data]) => ({
+    const phraseList = Array.from(phraseTriggers.entries()).map(([phrase, trigger]) => ({
         phrase,
-        funnelId: data.funnelId,
-        funnelName: funis.get(data.funnelId)?.name,
-        active: data.active,
-        triggerCount: data.triggerCount
+        ...trigger
     }));
-    res.json({ success: true, data: phrasesArray });
+    res.json({ success: true, data: phraseList });
 });
 
 app.post('/api/phrases', async (req, res) => {
-    const { phrase, funnelId } = req.body;
-    
-    if (!phrase || !funnelId) {
-        return res.status(400).json({ success: false, error: 'Dados inválidos' });
+    try {
+        const { phrase, funnelId } = req.body;
+        
+        if (!phrase || !funnelId) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Frase e funil são obrigatórios' 
+            });
+        }
+        
+        const normalizedPhrase = phrase.toLowerCase().trim();
+        
+        phraseTriggers.set(normalizedPhrase, {
+            funnelId,
+            active: true,
+            createdAt: new Date().toISOString()
+        });
+        
+        await saveData();
+        
+        addLog('phrase', `Frase-chave adicionada: "${normalizedPhrase}"`, { funnelId });
+        res.json({ success: true, message: 'Frase-chave adicionada com sucesso' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    const normalizedPhrase = phrase.toLowerCase().trim();
-    
-    phraseTriggers.set(normalizedPhrase, {
-        funnelId,
-        active: true,
-        triggerCount: 0
-    });
-    
-    await savePhrasesToFile();
-    
-    addLog('PHRASE_CREATED', `Frase cadastrada: ${normalizedPhrase}`, 
-        { funnelId }, LOG_LEVELS.INFO);
-    res.json({ success: true, message: 'Frase cadastrada' });
 });
 
 app.delete('/api/phrases/:phrase', async (req, res) => {
-    const phrase = decodeURIComponent(req.params.phrase);
-    
-    if (!phraseTriggers.has(phrase)) {
-        return res.status(404).json({ success: false, error: 'Frase não encontrada' });
+    try {
+        const phrase = decodeURIComponent(req.params.phrase);
+        
+        if (phraseTriggers.has(phrase)) {
+            phraseTriggers.delete(phrase);
+            await saveData();
+            
+            addLog('phrase', `Frase-chave removida: "${phrase}"`);
+            res.json({ success: true, message: 'Frase-chave removida com sucesso' });
+        } else {
+            res.status(404).json({ success: false, error: 'Frase não encontrada' });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    phraseTriggers.delete(phrase);
-    await savePhrasesToFile();
-    
-    addLog('PHRASE_DELETED', `Frase excluída: ${phrase}`, null, LOG_LEVELS.INFO);
-    res.json({ success: true, message: 'Frase excluída' });
 });
 
-// Frases manuais
+// ============ ROTAS - TRIGGERS MANUAIS ============
 app.get('/api/manual-triggers', (req, res) => {
-    const triggersArray = Array.from(manualTriggers.entries()).map(([id, data]) => ({
+    const triggerList = Array.from(manualTriggers.entries()).map(([id, trigger]) => ({
         id,
-        phrase: data.phrase,
-        funnelId: data.funnelId,
-        funnelName: funis.get(data.funnelId)?.name,
-        active: data.active,
-        triggerCount: data.triggerCount
+        ...trigger
     }));
-    res.json({ success: true, data: triggersArray });
+    res.json({ success: true, data: triggerList });
 });
 
 app.post('/api/manual-triggers', async (req, res) => {
-    const { phrase, funnelId } = req.body;
-    
-    if (!phrase || !funnelId) {
-        return res.status(400).json({ success: false, error: 'Dados inválidos' });
+    try {
+        const { eventType, productType, funnelId, name } = req.body;
+        
+        if (!eventType || !productType || !funnelId || !name) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Todos os campos são obrigatórios' 
+            });
+        }
+        
+        const id = `trigger_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        
+        manualTriggers.set(id, {
+            name,
+            eventType,
+            productType,
+            funnelId,
+            active: true,
+            createdAt: new Date().toISOString()
+        });
+        
+        await saveData();
+        
+        addLog('manual_trigger', `Trigger manual criado: ${name}`, { 
+            eventType, 
+            productType, 
+            funnelId 
+        });
+        
+        res.json({ success: true, message: 'Trigger manual criado com sucesso', id });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    const id = `MANUAL_${Date.now()}`;
-    const normalizedPhrase = phrase.toLowerCase().trim();
-    
-    manualTriggers.set(id, {
-        phrase: normalizedPhrase,
-        funnelId,
-        active: true,
-        triggerCount: 0
-    });
-    
-    await saveManualTriggersToFile();
-    
-    addLog('MANUAL_TRIGGER_CREATED', `Frase manual cadastrada: ${normalizedPhrase}`, 
-        { id, funnelId }, LOG_LEVELS.INFO);
-    res.json({ success: true, message: 'Frase manual cadastrada', data: { id } });
 });
 
 app.delete('/api/manual-triggers/:id', async (req, res) => {
-    const { id } = req.params;
-    
-    if (!manualTriggers.has(id)) {
-        return res.status(404).json({ success: false, error: 'Frase não encontrada' });
+    try {
+        const id = req.params.id;
+        
+        if (manualTriggers.has(id)) {
+            const trigger = manualTriggers.get(id);
+            manualTriggers.delete(id);
+            await saveData();
+            
+            addLog('manual_trigger', `Trigger manual removido: ${trigger.name}`);
+            res.json({ success: true, message: 'Trigger manual removido com sucesso' });
+        } else {
+            res.status(404).json({ success: false, error: 'Trigger não encontrado' });
+        }
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    manualTriggers.delete(id);
-    await saveManualTriggersToFile();
-    
-    addLog('MANUAL_TRIGGER_DELETED', `Frase manual excluída`, { id }, LOG_LEVELS.INFO);
-    res.json({ success: true, message: 'Frase manual excluída' });
 });
 
-// 🚀 ============ API CAMPANHAS ============
-
+// ============ ROTAS - CAMPANHAS ============
 app.get('/api/campaigns', (req, res) => {
-    const campaignsArray = Array.from(campaigns.entries()).map(([id, campaign]) => {
+    const campaignList = Array.from(campaigns.entries()).map(([id, campaign]) => {
         const instances = campaignInstances.get(id);
-        const instancesData = instances ? Array.from(instances.entries()).map(([inst, data]) => ({
-            instance: inst,
-            status: data.status,
-            sentToday: data.sentToday,
-            totalSent: data.totalSent,
-            queueSize: data.queue.length,
-            consecutiveErrors: data.consecutiveErrors,
-            lastSentAt: data.lastSentAt,
-            nextSendAt: data.nextSendAt,
-            pausedAt: data.pausedAt,
-            pauseReason: data.pauseReason
-        })) : [];
-
+        let totalContacts = 0;
+        
+        if (instances) {
+            instances.forEach(instanceState => {
+                totalContacts += instanceState.contacts.length;
+            });
+        }
+        
         return {
             id,
             ...campaign,
-            funnelName: funis.get(campaign.funnelId)?.name,
-            instancesStatus: instancesData
+            totalContacts,
+            funnelName: funis.get(campaign.funnelId)?.name || campaign.funnelId
         };
     });
     
-    res.json({ success: true, data: campaignsArray });
+    res.json({ success: true, data: campaignList });
 });
 
 app.post('/api/campaigns', async (req, res) => {
     try {
-        const { name, funnelId, contacts, config } = req.body;
+        const { 
+            name, 
+            funnelId, 
+            contacts, 
+            dailyLimit = CAMPAIGN_CONFIG.DEFAULT_DAILY_LIMIT,
+            startHour = CAMPAIGN_CONFIG.DEFAULT_START_HOUR,
+            endHour = CAMPAIGN_CONFIG.DEFAULT_END_HOUR
+        } = req.body;
         
         if (!name || !funnelId || !contacts || !Array.isArray(contacts) || contacts.length === 0) {
-            return res.status(400).json({ success: false, error: 'Dados inválidos' });
+            return res.status(400).json({
+                success: false,
+                error: 'Nome, funil e contatos são obrigatórios'
+            });
         }
         
-        if (!funis.has(funnelId)) {
-            return res.status(400).json({ success: false, error: 'Funil não encontrado' });
+        const funnel = funis.get(funnelId);
+        if (!funnel) {
+            return res.status(400).json({
+                success: false,
+                error: 'Funil não encontrado'
+            });
         }
         
-        // Valida todos os contatos
-        const validContacts = contacts
-            .map(c => validatePhoneNumber(c))
-            .filter(c => c !== null);
+        const validContacts = contacts.filter(c => c.phone).map(c => ({
+            phone: formatPhone(c.phone),
+            name: c.name || 'Cliente'
+        }));
         
         if (validContacts.length === 0) {
-            return res.status(400).json({ success: false, error: 'Nenhum contato válido' });
+            return res.status(400).json({
+                success: false,
+                error: 'Nenhum contato válido encontrado'
+            });
         }
         
-        const campaignId = 'CAMP_' + Date.now();
+        const campaignId = `campaign_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
         
-        // Configura campanha
+        const instanceStates = new Map();
+        const contactsPerInstance = Math.ceil(validContacts.length / INSTANCES.length);
+        
+        INSTANCES.forEach((instanceName, index) => {
+            const start = index * contactsPerInstance;
+            const end = Math.min(start + contactsPerInstance, validContacts.length);
+            const instanceContacts = validContacts.slice(start, end);
+            
+            if (instanceContacts.length > 0) {
+                instanceStates.set(instanceName, {
+                    contacts: instanceContacts,
+                    lastProcessedIndex: -1,
+                    dailySent: 0,
+                    consecutiveErrors: 0,
+                    status: 'active'
+                });
+            }
+        });
+        
         const campaign = {
-            id: campaignId,
             name,
             funnelId,
+            dailyLimit,
+            startHour,
+            endHour,
             status: 'active',
-            totalContacts: validContacts.length,
+            createdAt: new Date().toISOString(),
             stats: {
                 sent: 0,
                 errors: 0
-            },
-            config: {
-                dailyLimit: config?.dailyLimit || CAMPAIGN_CONFIG.DEFAULT_DAILY_LIMIT,
-                startHour: config?.startHour || CAMPAIGN_CONFIG.DEFAULT_START_HOUR,
-                endHour: config?.endHour || CAMPAIGN_CONFIG.DEFAULT_END_HOUR
-            },
-            createdAt: new Date().toISOString()
+            }
         };
         
         campaigns.set(campaignId, campaign);
+        campaignInstances.set(campaignId, instanceStates);
         
-        // Distribui contatos sequencialmente entre instâncias
-        const instancesMap = new Map();
-        
-        INSTANCES.forEach(instance => {
-            instancesMap.set(instance, {
-                status: 'active',
-                queue: [],
-                sentToday: 0,
-                totalSent: 0,
-                consecutiveErrors: 0,
-                todayResetAt: new Date().toISOString()
-            });
-        });
-        
-        // Distribuição circular
-        validContacts.forEach((contact, index) => {
-            const instanceIndex = index % INSTANCES.length;
-            const instance = INSTANCES[instanceIndex];
-            const data = instancesMap.get(instance);
-            data.queue.push(contact);
-        });
-        
-        campaignInstances.set(campaignId, instancesMap);
-        
-        await saveCampaignsToFile();
+        await saveData();
         
         addLog('CAMPAIGN_CREATED', `Campanha criada: ${name}`, {
             campaignId,
             totalContacts: validContacts.length,
-            instances: INSTANCES.length
+            instances: instanceStates.size,
+            dailyLimit
         }, LOG_LEVELS.INFO);
         
-        // Inicia processamento
         startCampaignProcessing(campaignId);
         
-        res.json({ 
-            success: true, 
-            message: 'Campanha criada e iniciada',
-            data: { 
-                campaignId,
-                totalContacts: validContacts.length,
-                invalidContacts: contacts.length - validContacts.length
-            }
+        res.json({
+            success: true,
+            message: 'Campanha criada com sucesso',
+            campaignId,
+            totalContacts: validContacts.length,
+            instancesUsed: instanceStates.size
         });
         
     } catch (error) {
-        addLog('CAMPAIGN_CREATE_ERROR', `Erro ao criar campanha: ${error.message}`, 
-            null, LOG_LEVELS.ERROR);
+        console.error('Erro ao criar campanha:', error);
+        addLog('CAMPAIGN_CREATE_ERROR', 'Erro ao criar campanha', 
+            { error: error.message }, LOG_LEVELS.ERROR);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
 app.put('/api/campaigns/:id/pause', async (req, res) => {
-    const campaignId = req.params.id;
-    const campaign = campaigns.get(campaignId);
-    
-    if (!campaign) {
-        return res.status(404).json({ success: false, error: 'Campanha não encontrada' });
+    try {
+        const campaignId = req.params.id;
+        const campaign = campaigns.get(campaignId);
+        
+        if (!campaign) {
+            return res.status(404).json({ success: false, error: 'Campanha não encontrada' });
+        }
+        
+        campaign.status = 'paused';
+        campaign.pausedAt = new Date().toISOString();
+        
+        const timer = campaignTimers.get(campaignId);
+        if (timer) {
+            clearTimeout(timer);
+            campaignTimers.delete(campaignId);
+        }
+        
+        await saveData();
+        
+        addLog('CAMPAIGN_PAUSED', `Campanha pausada: ${campaign.name}`, 
+            { campaignId }, LOG_LEVELS.INFO);
+        
+        res.json({ success: true, message: 'Campanha pausada com sucesso' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    campaign.status = 'paused';
-    campaign.pausedAt = new Date().toISOString();
-    campaigns.set(campaignId, campaign);
-    await saveCampaignsToFile();
-    
-    addLog('CAMPAIGN_PAUSED', `Campanha pausada manualmente`, { campaignId }, LOG_LEVELS.INFO);
-    
-    res.json({ success: true, message: 'Campanha pausada' });
 });
 
 app.put('/api/campaigns/:id/resume', async (req, res) => {
-    const campaignId = req.params.id;
-    const campaign = campaigns.get(campaignId);
-    
-    if (!campaign) {
-        return res.status(404).json({ success: false, error: 'Campanha não encontrada' });
+    try {
+        const campaignId = req.params.id;
+        const campaign = campaigns.get(campaignId);
+        
+        if (!campaign) {
+            return res.status(404).json({ success: false, error: 'Campanha não encontrada' });
+        }
+        
+        if (campaign.status === 'completed') {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Campanha já foi concluída' 
+            });
+        }
+        
+        campaign.status = 'active';
+        campaign.resumedAt = new Date().toISOString();
+        delete campaign.pausedAt;
+        
+        await saveData();
+        
+        addLog('CAMPAIGN_RESUMED', `Campanha retomada: ${campaign.name}`, 
+            { campaignId }, LOG_LEVELS.INFO);
+        
+        startCampaignProcessing(campaignId);
+        
+        res.json({ success: true, message: 'Campanha retomada com sucesso' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    campaign.status = 'active';
-    campaign.pausedAt = null;
-    campaigns.set(campaignId, campaign);
-    await saveCampaignsToFile();
-    
-    // Reinicia processamento
-    startCampaignProcessing(campaignId);
-    
-    addLog('CAMPAIGN_RESUMED', `Campanha retomada`, { campaignId }, LOG_LEVELS.INFO);
-    
-    res.json({ success: true, message: 'Campanha retomada' });
 });
 
 app.delete('/api/campaigns/:id', async (req, res) => {
-    const campaignId = req.params.id;
-    const campaign = campaigns.get(campaignId);
-    
-    if (!campaign) {
-        return res.status(404).json({ success: false, error: 'Campanha não encontrada' });
+    try {
+        const campaignId = req.params.id;
+        const campaign = campaigns.get(campaignId);
+        
+        if (!campaign) {
+            return res.status(404).json({ success: false, error: 'Campanha não encontrada' });
+        }
+        
+        campaign.status = 'cancelled';
+        campaign.cancelledAt = new Date().toISOString();
+        
+        const timer = campaignTimers.get(campaignId);
+        if (timer) {
+            clearTimeout(timer);
+            campaignTimers.delete(campaignId);
+        }
+        
+        campaigns.delete(campaignId);
+        campaignInstances.delete(campaignId);
+        
+        await saveData();
+        
+        addLog('CAMPAIGN_CANCELLED', `Campanha cancelada: ${campaign.name}`, 
+            { campaignId }, LOG_LEVELS.INFO);
+        
+        res.json({ success: true, message: 'Campanha cancelada com sucesso' });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    campaign.status = 'cancelled';
-    campaign.cancelledAt = new Date().toISOString();
-    campaigns.set(campaignId, campaign);
-    await saveCampaignsToFile();
-    
-    addLog('CAMPAIGN_CANCELLED', `Campanha cancelada`, { campaignId }, LOG_LEVELS.INFO);
-    
-    res.json({ success: true, message: 'Campanha cancelada' });
 });
 
-// Reativar instância pausada
 app.put('/api/campaigns/:campaignId/instances/:instance/reactivate', async (req, res) => {
-    const { campaignId, instance } = req.params;
-    
-    const campaign = campaigns.get(campaignId);
-    if (!campaign) {
-        return res.status(404).json({ success: false, error: 'Campanha não encontrada' });
+    try {
+        const { campaignId, instance } = req.params;
+        
+        const campaign = campaigns.get(campaignId);
+        if (!campaign) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Campanha não encontrada' 
+            });
+        }
+        
+        const instances = campaignInstances.get(campaignId);
+        if (!instances || !instances.has(instance)) {
+            return res.status(404).json({ 
+                success: false, 
+                error: 'Instância não encontrada nesta campanha' 
+            });
+        }
+        
+        const instanceState = instances.get(instance);
+        instanceState.status = 'active';
+        instanceState.consecutiveErrors = 0;
+        delete instanceState.pausedReason;
+        
+        await saveData();
+        
+        addLog('CAMPAIGN_INSTANCE_REACTIVATED',
+            `Instância ${instance} reativada na campanha ${campaign.name}`,
+            { campaignId, instance },
+            LOG_LEVELS.INFO
+        );
+        
+        if (campaign.status === 'active') {
+            startCampaignProcessing(campaignId);
+        }
+        
+        res.json({ 
+            success: true, 
+            message: `Instância ${instance} reativada com sucesso` 
+        });
+        
+    } catch (error) {
+        console.error('Erro ao reativar instância:', error);
+        res.status(500).json({ success: false, error: error.message });
     }
-    
-    const instances = campaignInstances.get(campaignId);
-    if (!instances || !instances.has(instance)) {
-        return res.status(404).json({ success: false, error: 'Instância não encontrada' });
-    }
-    
-    const instanceData = instances.get(instance);
-    instanceData.status = 'active';
-    instanceData.consecutiveErrors = 0;
-    instanceData.pausedAt = null;
-    instanceData.pauseReason = null;
-    
-    await saveCampaignsToFile();
-    
-    addLog('CAMPAIGN_INSTANCE_REACTIVATED', `Instância reativada manualmente`, {
-        campaignId,
-        instance
-    }, LOG_LEVELS.INFO);
-    
-    // Reinicia processamento desta instância
-    if (campaign.status === 'active') {
-        processCampaignInstance(campaignId, instance);
-    }
-    
-    res.json({ success: true, message: 'Instância reativada' });
 });
 
-// Conversas
+// ============ ROTAS - CONVERSAS E LOGS ============
 app.get('/api/conversations', (req, res) => {
-    const conversationsList = Array.from(conversations.entries()).map(([phoneKey, conv]) => ({
-        id: phoneKey,
-        phone: conv.remoteJid.replace('@s.whatsapp.net', ''),
-        phoneKey: phoneKey,
-        customerName: conv.customerName,
-        productType: conv.productType,
-        funnelId: conv.funnelId,
-        stepIndex: conv.stepIndex,
-        waiting_for_response: conv.waiting_for_response,
-        pixWaiting: conv.pixWaiting || false,
-        createdAt: conv.createdAt,
-        lastSystemMessage: conv.lastSystemMessage,
-        lastReply: conv.lastReply,
-        orderCode: conv.orderCode,
-        amount: conv.amount,
-        stickyInstance: stickyInstances.get(phoneKey),
-        canceled: conv.canceled || false,
-        completed: conv.completed || false,
-        hasError: conv.hasError || false,
-        errorMessage: conv.errorMessage,
-        source: conv.source || 'kirvano',
-        campaignId: conv.campaignId
+    const conversationList = Array.from(conversations.values()).map(conv => ({
+        ...conv,
+        instance: stickyInstances.get(conv.phone) || 'N/A'
     }));
     
-    conversationsList.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-    
-    res.json({ success: true, data: conversationsList });
+    res.json({ 
+        success: true, 
+        data: conversationList.sort((a, b) => 
+            new Date(b.startedAt) - new Date(a.startedAt)
+        ).slice(0, 100) 
+    });
 });
 
-// Logs
 app.get('/api/logs', (req, res) => {
-    res.json({ success: true, data: logs });
+    res.json({ success: true, data: logs.slice(0, 500) });
 });
 
-// Páginas
+// ============ ROTAS - FRONTEND ============
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -1568,16 +1617,22 @@ app.listen(PORT, async () => {
     console.log('  5. ✅ Pausa automática após 3 erros consecutivos');
     console.log('  6. ✅ Redistribuição inteligente de contatos');
     console.log('  7. ✅ Reativação manual de instâncias');
+    console.log('  8. 🆕 IMPORTAR/EXPORTAR/DELETAR funis');
     console.log('');
     console.log('📡 Endpoints:');
     console.log('  POST /webhook/kirvano           - Eventos Kirvano');
     console.log('  POST /webhook/evolution         - Mensagens WhatsApp');
+    console.log('  GET  /api/funnels               - Listar funis');
+    console.log('  POST /api/funnels               - Criar funil');
+    console.log('  PUT  /api/funnels/:id           - Atualizar funil');
+    console.log('  DELETE /api/funnels/:id         - Deletar funil');
+    console.log('  POST /api/funnels/import        - Importar funis');
+    console.log('  GET  /api/funnels/export        - Exportar funis');
     console.log('  GET  /api/campaigns             - Listar campanhas');
     console.log('  POST /api/campaigns             - Criar campanha');
     console.log('  PUT  /api/campaigns/:id/pause   - Pausar campanha');
     console.log('  PUT  /api/campaigns/:id/resume  - Retomar campanha');
     console.log('  DELETE /api/campaigns/:id       - Cancelar campanha');
-    console.log('  PUT  /api/campaigns/:id/instances/:inst/reactivate - Reativar instância');
     console.log('');
     console.log('🌐 Frontend:');
     console.log('  http://localhost:' + PORT + '           - Dashboard principal');
