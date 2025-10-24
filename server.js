@@ -17,7 +17,7 @@ const PHRASES_FILE = path.join(__dirname, 'data', 'phrases.json');
 const LOGS_FILE = path.join(__dirname, 'data', 'logs.json');
 const MANUAL_TRIGGERS_FILE = path.join(__dirname, 'data', 'manual_triggers.json');
 
-// Produtos CS e FB (Kirvano)
+// Produtos CS e FB
 const PRODUCT_MAPPING = {
     '5c1f6390-8999-4740-b16f-51380e1097e4': 'CS',
     '0f393085-4960-4c71-9efe-faee8ba51d3f': 'CS',
@@ -263,973 +263,1215 @@ async function loadManualTriggersFromFile() {
 async function saveConversationsToFile() {
     try {
         await ensureDataDir();
-        const conversationsArray = Array.from(conversations.entries()).map(([key, conv]) => ({
-            key,
-            ...conv
+        const conversationsArray = Array.from(conversations.entries()).map(([key, value]) => ({
+            phoneKey: key,
+            ...value,
+            createdAt: value.createdAt.toISOString(),
+            lastSystemMessage: value.lastSystemMessage ? value.lastSystemMessage.toISOString() : null,
+            lastReply: value.lastReply ? value.lastReply.toISOString() : null,
+            completedAt: value.completedAt ? value.completedAt.toISOString() : null,
+            canceledAt: value.canceledAt ? value.canceledAt.toISOString() : null
         }));
-        await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify(conversationsArray, null, 2));
-        addLog('CONVERSATIONS_SAVE', `Conversas salvas: ${conversationsArray.length}`, null, LOG_LEVELS.DEBUG);
+        
+        await fs.writeFile(CONVERSATIONS_FILE, JSON.stringify({
+            conversations: conversationsArray,
+            phoneIndex: Array.from(phoneIndex.entries()),
+            stickyInstances: Array.from(stickyInstances.entries())
+        }, null, 2));
+        
+        addLog('DATA_SAVE', `Conversas salvas: ${conversationsArray.length}`, null, LOG_LEVELS.DEBUG);
     } catch (error) {
-        addLog('CONVERSATIONS_SAVE_ERROR', `Erro: ${error.message}`, null, LOG_LEVELS.ERROR);
+        addLog('DATA_SAVE_ERROR', `Erro: ${error.message}`, null, LOG_LEVELS.ERROR);
     }
 }
 
 async function loadConversationsFromFile() {
     try {
         const data = await fs.readFile(CONVERSATIONS_FILE, 'utf8');
-        const conversationsArray = JSON.parse(data);
+        const parsed = JSON.parse(data);
         conversations.clear();
-        phoneIndex.clear();
-        stickyInstances.clear();
-        
-        conversationsArray.forEach(item => {
-            const { key, ...conv } = item;
-            conversations.set(key, conv);
-            phoneIndex.set(conv.remoteJid, key);
-            if (conv.stickyInstance) {
-                stickyInstances.set(key, conv.stickyInstance);
-            }
+        parsed.conversations.forEach(conv => {
+            conversations.set(conv.phoneKey, {
+                ...conv,
+                createdAt: new Date(conv.createdAt),
+                lastSystemMessage: conv.lastSystemMessage ? new Date(conv.lastSystemMessage) : null,
+                lastReply: conv.lastReply ? new Date(conv.lastReply) : null,
+                completedAt: conv.completedAt ? new Date(conv.completedAt) : null,
+                canceledAt: conv.canceledAt ? new Date(conv.canceledAt) : null
+            });
         });
-        
-        addLog('CONVERSATIONS_LOAD', `Conversas carregadas: ${conversations.size}`, null, LOG_LEVELS.INFO);
+        phoneIndex.clear();
+        parsed.phoneIndex.forEach(([key, value]) => phoneIndex.set(key, value));
+        stickyInstances.clear();
+        parsed.stickyInstances.forEach(([key, value]) => stickyInstances.set(key, value));
+        addLog('DATA_LOAD', `Conversas carregadas: ${parsed.conversations.length}`, null, LOG_LEVELS.INFO);
         return true;
     } catch (error) {
-        addLog('CONVERSATIONS_LOAD_ERROR', 'Sem conversas anteriores', null, LOG_LEVELS.DEBUG);
+        addLog('DATA_LOAD_ERROR', 'Nenhuma conversa anterior', null, LOG_LEVELS.DEBUG);
         return false;
     }
 }
 
-// ============ FUNÇÕES DE ENVIO ============
-function getNextInstance() {
-    lastSuccessfulInstanceIndex = (lastSuccessfulInstanceIndex + 1) % INSTANCES.length;
-    return INSTANCES[lastSuccessfulInstanceIndex];
-}
-
-function normalizePhone(phone) {
-    let cleaned = phone.replace(/\D/g, '');
-    if (cleaned.startsWith('55')) {
-        cleaned = cleaned.slice(2);
-    }
-    return '55' + cleaned;
-}
-
-async function sendMessage(phoneNumber, text, instanceName = null) {
-    const maxRetries = 3;
-    let lastError = null;
-
-    const phoneKey = phoneIndex.get(phoneNumber + '@s.whatsapp.net');
-    const useStickyInstance = phoneKey && stickyInstances.has(phoneKey);
-    const stickyInstance = useStickyInstance ? stickyInstances.get(phoneKey) : null;
-
-    const instancesToTry = useStickyInstance 
-        ? [stickyInstance, ...INSTANCES.filter(i => i !== stickyInstance)]
-        : (instanceName ? [instanceName, ...INSTANCES.filter(i => i !== instanceName)] : [...INSTANCES]);
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-        for (const instance of instancesToTry) {
-            try {
-                const url = `${EVOLUTION_BASE_URL}/message/sendText/${instance}`;
-                const response = await axios.post(url, {
-                    number: phoneNumber,
-                    text: text,
-                    delay: 1200
-                }, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': EVOLUTION_API_KEY
-                    },
-                    timeout: 30000
-                });
-
-                if (response.status === 201 && response.data?.key?.id) {
-                    addLog('MESSAGE_SENT', `Mensagem enviada - Instância: ${instance}`, 
-                        { phone: phoneNumber, instance }, LOG_LEVELS.INFO);
-                    
-                    if (phoneKey && !stickyInstances.has(phoneKey)) {
-                        stickyInstances.set(phoneKey, instance);
-                        addLog('STICKY_INSTANCE_SET', `Instância fixa definida: ${instance}`, 
-                            { phoneKey, instance }, LOG_LEVELS.DEBUG);
-                    }
-                    
-                    lastSuccessfulInstanceIndex = INSTANCES.indexOf(instance);
-                    return { success: true, instance, messageId: response.data.key.id };
-                }
-            } catch (error) {
-                lastError = error;
-                addLog('MESSAGE_ERROR', `Erro na instância ${instance} (tentativa ${attempt + 1})`, 
-                    { instance, error: error.message, phone: phoneNumber }, LOG_LEVELS.WARNING);
-                
-                await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-            }
-        }
-    }
-
-    addLog('MESSAGE_FAILED', `Falha total após ${maxRetries} tentativas`, 
-        { phone: phoneNumber, error: lastError?.message }, LOG_LEVELS.ERROR);
-    return { success: false, error: lastError?.message || 'Todas as tentativas falhar am' };
-}
-
-async function sendMedia(phoneNumber, mediaUrl, caption = '', mediaType = 'image', instanceName = null) {
-    const maxRetries = 3;
-    let lastError = null;
-
-    const phoneKey = phoneIndex.get(phoneNumber + '@s.whatsapp.net');
-    const useStickyInstance = phoneKey && stickyInstances.has(phoneKey);
-    const stickyInstance = useStickyInstance ? stickyInstances.get(phoneKey) : null;
-
-    const instancesToTry = useStickyInstance 
-        ? [stickyInstance, ...INSTANCES.filter(i => i !== stickyInstance)]
-        : (instanceName ? [instanceName, ...INSTANCES.filter(i => i !== instanceName)] : [...INSTANCES]);
-
-    const endpoint = mediaType === 'video' ? 'sendMedia' : 
-                     mediaType === 'audio' ? 'sendWhatsAppAudio' : 'sendMedia';
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-        for (const instance of instancesToTry) {
-            try {
-                const url = `${EVOLUTION_BASE_URL}/message/${endpoint}/${instance}`;
-                
-                const payload = mediaType === 'audio' 
-                    ? { number: phoneNumber, audioUrl: mediaUrl, delay: 1200 }
-                    : { number: phoneNumber, mediaUrl: mediaUrl, caption: caption, mediaType: mediaType, delay: 1200 };
-
-                const response = await axios.post(url, payload, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': EVOLUTION_API_KEY
-                    },
-                    timeout: 60000
-                });
-
-                if (response.status === 201 && response.data?.key?.id) {
-                    addLog('MEDIA_SENT', `Mídia enviada - Instância: ${instance}`, 
-                        { phone: phoneNumber, type: mediaType, instance }, LOG_LEVELS.INFO);
-                    
-                    if (phoneKey && !stickyInstances.has(phoneKey)) {
-                        stickyInstances.set(phoneKey, instance);
-                    }
-                    
-                    lastSuccessfulInstanceIndex = INSTANCES.indexOf(instance);
-                    return { success: true, instance, messageId: response.data.key.id };
-                }
-            } catch (error) {
-                lastError = error;
-                addLog('MEDIA_ERROR', `Erro ao enviar mídia na instância ${instance}`, 
-                    { instance, error: error.message, phone: phoneNumber, type: mediaType }, LOG_LEVELS.WARNING);
-                
-                await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-            }
-        }
-    }
-
-    addLog('MEDIA_FAILED', `Falha ao enviar mídia após ${maxRetries} tentativas`, 
-        { phone: phoneNumber, type: mediaType, error: lastError?.message }, LOG_LEVELS.ERROR);
-    return { success: false, error: lastError?.message || 'Todas as tentativas falharam' };
-}
-
-async function sendButton(phoneNumber, text, buttons, instanceName = null) {
-    const maxRetries = 3;
-    let lastError = null;
-
-    const phoneKey = phoneIndex.get(phoneNumber + '@s.whatsapp.net');
-    const useStickyInstance = phoneKey && stickyInstances.has(phoneKey);
-    const stickyInstance = useStickyInstance ? stickyInstances.get(phoneKey) : null;
-
-    const instancesToTry = useStickyInstance 
-        ? [stickyInstance, ...INSTANCES.filter(i => i !== stickyInstance)]
-        : (instanceName ? [instanceName, ...INSTANCES.filter(i => i !== instanceName)] : [...INSTANCES]);
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-        for (const instance of instancesToTry) {
-            try {
-                const url = `${EVOLUTION_BASE_URL}/message/sendButtons/${instance}`;
-                const response = await axios.post(url, {
-                    number: phoneNumber,
-                    title: text,
-                    description: '',
-                    footer: '',
-                    buttons: buttons
-                }, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': EVOLUTION_API_KEY
-                    },
-                    timeout: 30000
-                });
-
-                if (response.status === 201 && response.data?.key?.id) {
-                    addLog('BUTTON_SENT', `Botões enviados - Instância: ${instance}`, 
-                        { phone: phoneNumber, instance }, LOG_LEVELS.INFO);
-                    
-                    if (phoneKey && !stickyInstances.has(phoneKey)) {
-                        stickyInstances.set(phoneKey, instance);
-                    }
-                    
-                    lastSuccessfulInstanceIndex = INSTANCES.indexOf(instance);
-                    return { success: true, instance, messageId: response.data.key.id };
-                }
-            } catch (error) {
-                lastError = error;
-                addLog('BUTTON_ERROR', `Erro ao enviar botões na instância ${instance}`, 
-                    { instance, error: error.message, phone: phoneNumber }, LOG_LEVELS.WARNING);
-                
-                await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-            }
-        }
-    }
-
-    addLog('BUTTON_FAILED', `Falha ao enviar botões após ${maxRetries} tentativas`, 
-        { phone: phoneNumber, error: lastError?.message }, LOG_LEVELS.ERROR);
-    return { success: false, error: lastError?.message || 'Todas as tentativas falharam' };
-}
-
-async function addToGroup(phoneNumber, groupId, instanceName = null) {
-    const maxRetries = 3;
-    let lastError = null;
-
-    const phoneKey = phoneIndex.get(phoneNumber + '@s.whatsapp.net');
-    const useStickyInstance = phoneKey && stickyInstances.has(phoneKey);
-    const stickyInstance = useStickyInstance ? stickyInstances.get(phoneKey) : null;
-
-    const instancesToTry = useStickyInstance 
-        ? [stickyInstance, ...INSTANCES.filter(i => i !== stickyInstance)]
-        : (instanceName ? [instanceName, ...INSTANCES.filter(i => i !== instanceName)] : [...INSTANCES]);
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-        for (const instance of instancesToTry) {
-            try {
-                const url = `${EVOLUTION_BASE_URL}/group/updateParticipant/${instance}`;
-                const response = await axios.post(url, {
-                    groupId: groupId,
-                    action: 'add',
-                    participants: [phoneNumber]
-                }, {
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': EVOLUTION_API_KEY
-                    },
-                    timeout: 30000
-                });
-
-                if (response.status === 201 || response.status === 200) {
-                    addLog('GROUP_ADD_SUCCESS', `Adicionado ao grupo - Instância: ${instance}`, 
-                        { phone: phoneNumber, groupId, instance }, LOG_LEVELS.INFO);
-                    
-                    if (phoneKey && !stickyInstances.has(phoneKey)) {
-                        stickyInstances.set(phoneKey, instance);
-                    }
-                    
-                    lastSuccessfulInstanceIndex = INSTANCES.indexOf(instance);
-                    return { success: true, instance };
-                }
-            } catch (error) {
-                lastError = error;
-                addLog('GROUP_ADD_ERROR', `Erro ao adicionar no grupo na instância ${instance}`, 
-                    { instance, error: error.message, phone: phoneNumber, groupId }, LOG_LEVELS.WARNING);
-                
-                await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
-            }
-        }
-    }
-
-    addLog('GROUP_ADD_FAILED', `Falha ao adicionar no grupo após ${maxRetries} tentativas`, 
-        { phone: phoneNumber, groupId, error: lastError?.message }, LOG_LEVELS.ERROR);
-    return { success: false, error: lastError?.message || 'Todas as tentativas falharam' };
-}
-
-// ============ EXECUÇÃO DE FUNIS ============
-async function executeFunnel(phoneKey, funnelId, customerData) {
-    const funnel = funis.get(funnelId);
-    if (!funnel || !funnel.steps || funnel.steps.length === 0) {
-        addLog('FUNNEL_ERROR', `Funil não encontrado ou vazio: ${funnelId}`, 
-            { funnelId, phoneKey }, LOG_LEVELS.ERROR);
-        return;
-    }
-
-    const conv = conversations.get(phoneKey) || {};
-    const phoneNumber = (conv.remoteJid || customerData.phone || '').replace('@s.whatsapp.net', '');
-
-    if (!phoneNumber) {
-        addLog('FUNNEL_ERROR', 'Telefone inválido', { phoneKey, funnelId }, LOG_LEVELS.ERROR);
-        return;
-    }
-
-    addLog('FUNNEL_START', `Iniciando funil: ${funnel.name}`, 
-        { phoneKey, funnelId, steps: funnel.steps.length }, LOG_LEVELS.INFO);
-
-    const conversation = {
-        remoteJid: phoneNumber + '@s.whatsapp.net',
-        customerName: customerData.name || 'Cliente',
-        productType: customerData.productType || 'Desconhecido',
-        funnelId: funnelId,
-        stepIndex: 0,
-        waiting_for_response: false,
-        createdAt: new Date().toISOString(),
-        lastSystemMessage: null,
-        lastReply: null,
-        orderCode: customerData.orderCode || null,
-        amount: customerData.amount || null,
-        pixWaiting: funnelId.includes('PIX'),
-        canceled: false,
-        completed: false,
-        transferredFromPix: customerData.transferredFromPix || false,
-        source: customerData.source || 'kirvano'
-    };
-
-    conversations.set(phoneKey, conversation);
-    phoneIndex.set(conversation.remoteJid, phoneKey);
+setInterval(async () => {
+    await saveFunnelsToFile();
     await saveConversationsToFile();
+    await savePhrasesToFile();
+    await saveManualTriggersToFile();
+    await saveLogsToFile();
+}, 30000);
 
-    for (let i = 0; i < funnel.steps.length; i++) {
-        const step = funnel.steps[i];
-        const currentConv = conversations.get(phoneKey);
+Object.values(defaultFunnels).forEach(funnel => funis.set(funnel.id, funnel));
 
-        if (!currentConv || currentConv.canceled || currentConv.completed) {
-            addLog('FUNNEL_INTERRUPTED', 'Funil interrompido', 
-                { phoneKey, step: i, reason: !currentConv ? 'removido' : currentConv.canceled ? 'cancelado' : 'completo' }, 
-                LOG_LEVELS.WARNING);
-            break;
-        }
-
-        currentConv.stepIndex = i;
-        await saveConversationsToFile();
-
-        if (step.delay && step.delay > 0) {
-            addLog('FUNNEL_DELAY', `Aguardando ${step.delay}ms`, 
-                { phoneKey, step: i, delay: step.delay }, LOG_LEVELS.DEBUG);
-            await new Promise(resolve => setTimeout(resolve, step.delay));
-        }
-
-        addLog('FUNNEL_STEP', `Executando passo ${i + 1}/${funnel.steps.length}`, 
-            { phoneKey, step: i, type: step.type }, LOG_LEVELS.DEBUG);
-
-        try {
-            if (step.type === 'text' && step.content) {
-                const processedText = step.content
-                    .replace(/{nome}/gi, customerData.name || 'Cliente')
-                    .replace(/{codigo}/gi, customerData.orderCode || '')
-                    .replace(/{valor}/gi, customerData.amount || '');
-                
-                await sendMessage(phoneNumber, processedText);
-                currentConv.lastSystemMessage = processedText;
-            } 
-            else if (step.type === 'image' && step.url) {
-                await sendMedia(phoneNumber, step.url, step.caption || '', 'image');
-            } 
-            else if (step.type === 'video' && step.url) {
-                await sendMedia(phoneNumber, step.url, step.caption || '', 'video');
-            } 
-            else if (step.type === 'audio' && step.url) {
-                await sendMedia(phoneNumber, step.url, '', 'audio');
-            } 
-            else if (step.type === 'document' && step.url) {
-                await sendMedia(phoneNumber, step.url, step.caption || '', 'document');
-            } 
-            else if (step.type === 'button' && step.content && step.buttons) {
-                await sendButton(phoneNumber, step.content, step.buttons);
-            } 
-            else if (step.type === 'group' && step.groupId) {
-                await addToGroup(phoneNumber, step.groupId);
-            }
-            else if (step.type === 'wait_reply') {
-                currentConv.waiting_for_response = true;
-                await saveConversationsToFile();
-                addLog('FUNNEL_WAITING', 'Aguardando resposta do cliente', 
-                    { phoneKey, step: i }, LOG_LEVELS.INFO);
-                return;
-            }
-
-            await saveConversationsToFile();
-
-        } catch (error) {
-            addLog('FUNNEL_STEP_ERROR', `Erro no passo ${i + 1}`, 
-                { phoneKey, step: i, error: error.message }, LOG_LEVELS.ERROR);
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
-    const finalConv = conversations.get(phoneKey);
-    if (finalConv && !finalConv.canceled) {
-        finalConv.completed = true;
-        await saveConversationsToFile();
-        addLog('FUNNEL_COMPLETED', `Funil concluído: ${funnel.name}`, 
-            { phoneKey, funnelId }, LOG_LEVELS.INFO);
-    }
-}
-
-// ============ MIDDLEWARE ============
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(express.json());
 app.use(express.static('public'));
 
-// ============ WEBHOOK KIRVANO ============
-app.post('/webhook/kirvano', async (req, res) => {
-    try {
-        const data = req.body;
-        
-        addLog('WEBHOOK_RECEIVED', 'Webhook Kirvano recebido', 
-            { 
-                event: data.event_type, 
-                order: data.order_id,
-                customer: data.customer?.name 
-            }, 
-            LOG_LEVELS.INFO);
+function extractPhoneKey(phone) {
+    if (!phone) return '';
+    const cleaned = phone.replace(/\D/g, '');
+    return cleaned.slice(-8);
+}
 
-        if (!data.customer || !data.customer.phone) {
-            addLog('WEBHOOK_ERROR', 'Dados incompletos no webhook', 
-                { data }, LOG_LEVELS.ERROR);
-            return res.status(400).json({ error: 'Dados incompletos' });
-        }
-
-        const phone = normalizePhone(data.customer.phone);
-        const phoneKey = uuidv4();
-        const productId = data.product?.uuid;
-        const productType = PRODUCT_MAPPING[productId];
-
-        if (!productType) {
-            addLog('WEBHOOK_IGNORED', 'Produto não mapeado', 
-                { productId }, LOG_LEVELS.WARNING);
-            return res.json({ success: true, message: 'Produto não configurado' });
-        }
-
-        const customerData = {
-            phone: phone,
-            name: data.customer.name || 'Cliente',
-            productType: productType,
-            orderCode: data.order_id || '',
-            amount: data.order?.amount ? `R$ ${(data.order.amount / 100).toFixed(2)}` : '',
-            source: 'kirvano'
-        };
-
-        let funnelId = null;
-
-        if (data.event_type === 'order.approved' || data.event_type === 'order.paid') {
-            funnelId = `${productType}_APROVADA`;
-            
-            if (pixTimeouts.has(phone)) {
-                clearTimeout(pixTimeouts.get(phone).timeoutId);
-                pixTimeouts.delete(phone);
-                customerData.transferredFromPix = true;
-                addLog('PIX_APPROVED', 'PIX aprovado - convertendo funil', 
-                    { phone, productType }, LOG_LEVELS.INFO);
-            }
-        } 
-        else if (data.event_type === 'order.waiting') {
-            funnelId = `${productType}_PIX`;
-            
-            const timeoutId = setTimeout(async () => {
-                const lockAcquired = await acquireWebhookLock(phone);
-                if (!lockAcquired) return;
-                
-                try {
-                    addLog('PIX_TIMEOUT', 'Timeout do PIX - removendo conversa', 
-                        { phone }, LOG_LEVELS.WARNING);
-                    
-                    const currentPhoneKey = phoneIndex.get(phone + '@s.whatsapp.net');
-                    if (currentPhoneKey) {
-                        const conv = conversations.get(currentPhoneKey);
-                        if (conv) conv.canceled = true;
-                        conversations.delete(currentPhoneKey);
-                        phoneIndex.delete(phone + '@s.whatsapp.net');
-                        stickyInstances.delete(currentPhoneKey);
-                    }
-                    pixTimeouts.delete(phone);
-                    await saveConversationsToFile();
-                } finally {
-                    releaseWebhookLock(phone);
-                }
-            }, PIX_TIMEOUT);
-
-            pixTimeouts.set(phone, { timeoutId, productType });
-            addLog('PIX_TIMEOUT_SET', `Timeout PIX configurado: ${PIX_TIMEOUT/1000}s`, 
-                { phone, productType }, LOG_LEVELS.INFO);
-        }
-
-        if (funnelId) {
-            const lockAcquired = await acquireWebhookLock(phone);
-            if (!lockAcquired) {
-                return res.status(429).json({ error: 'Requisição em processamento' });
-            }
-
-            try {
-                await executeFunnel(phoneKey, funnelId, customerData);
-                res.json({ success: true, message: 'Funil iniciado' });
-            } finally {
-                releaseWebhookLock(phone);
-            }
-        } else {
-            res.json({ success: true, message: 'Evento não processado' });
-        }
-
-    } catch (error) {
-        addLog('WEBHOOK_ERROR', `Erro crítico: ${error.message}`, 
-            { error: error.stack }, LOG_LEVELS.CRITICAL);
-        res.status(500).json({ error: 'Erro interno' });
+function registerPhone(fullPhone, phoneKey) {
+    if (!phoneKey || phoneKey.length !== 8) return;
+    const cleaned = fullPhone.replace(/\D/g, '');
+    phoneIndex.set(cleaned, phoneKey);
+    if (cleaned.startsWith('55')) {
+        phoneIndex.set(cleaned.substring(2), phoneKey);
     }
-});
-
-// ============ WEBHOOK PERFECTPAY ============
-app.post('/webhook/perfect', async (req, res) => {
-    try {
-        const data = req.body;
-        
-        addLog('WEBHOOK_RECEIVED', 'Webhook PerfectPay recebido', 
-            { 
-                status: data.sale_status_enum_key,
-                code: data.code,
-                plan: data.plan?.code,
-                customer: data.customer?.full_name 
-            }, 
-            LOG_LEVELS.INFO);
-
-        if (!data.customer || !data.customer.phone_number || !data.plan) {
-            addLog('WEBHOOK_ERROR', 'Dados incompletos no webhook PerfectPay', 
-                { data }, LOG_LEVELS.ERROR);
-            return res.status(400).json({ error: 'Dados incompletos' });
-        }
-
-        const planCode = data.plan.code;
-        const productType = PERFECTPAY_PLANS[planCode];
-
-        if (!productType) {
-            addLog('WEBHOOK_IGNORED', 'Plano PerfectPay não mapeado', 
-                { planCode }, LOG_LEVELS.WARNING);
-            return res.json({ success: true, message: 'Plano não configurado' });
-        }
-
-        const phoneArea = data.customer.phone_area_code || '';
-        const phoneNum = data.customer.phone_number || '';
-        const fullPhone = normalizePhone(phoneArea + phoneNum);
-        const phoneKey = uuidv4();
-
-        const customerData = {
-            phone: fullPhone,
-            name: data.customer.full_name || 'Cliente',
-            productType: productType,
-            orderCode: data.code || '',
-            amount: data.sale_amount ? `R$ ${data.sale_amount.toFixed(2)}` : '',
-            source: 'perfectpay'
-        };
-
-        let funnelId = null;
-
-        if (data.sale_status_enum_key === 'approved') {
-            funnelId = `${productType}_APROVADA`;
-            
-            if (pixTimeouts.has(fullPhone)) {
-                clearTimeout(pixTimeouts.get(fullPhone).timeoutId);
-                pixTimeouts.delete(fullPhone);
-                customerData.transferredFromPix = true;
-                addLog('PIX_APPROVED', 'PIX aprovado (PerfectPay) - convertendo funil', 
-                    { phone: fullPhone, productType }, LOG_LEVELS.INFO);
-            }
-        } 
-        else if (data.sale_status_enum_key === 'pending') {
-            funnelId = `${productType}_PIX`;
-            
-            const timeoutId = setTimeout(async () => {
-                const lockAcquired = await acquireWebhookLock(fullPhone);
-                if (!lockAcquired) return;
-                
-                try {
-                    addLog('PIX_TIMEOUT', 'Timeout do PIX (PerfectPay) - removendo conversa', 
-                        { phone: fullPhone }, LOG_LEVELS.WARNING);
-                    
-                    const currentPhoneKey = phoneIndex.get(fullPhone + '@s.whatsapp.net');
-                    if (currentPhoneKey) {
-                        const conv = conversations.get(currentPhoneKey);
-                        if (conv) conv.canceled = true;
-                        conversations.delete(currentPhoneKey);
-                        phoneIndex.delete(fullPhone + '@s.whatsapp.net');
-                        stickyInstances.delete(currentPhoneKey);
-                    }
-                    pixTimeouts.delete(fullPhone);
-                    await saveConversationsToFile();
-                } finally {
-                    releaseWebhookLock(fullPhone);
-                }
-            }, PIX_TIMEOUT);
-
-            pixTimeouts.set(fullPhone, { timeoutId, productType });
-            addLog('PIX_TIMEOUT_SET', `Timeout PIX (PerfectPay) configurado: ${PIX_TIMEOUT/1000}s`, 
-                { phone: fullPhone, productType }, LOG_LEVELS.INFO);
-        }
-
-        if (funnelId) {
-            const lockAcquired = await acquireWebhookLock(fullPhone);
-            if (!lockAcquired) {
-                return res.status(429).json({ error: 'Requisição em processamento' });
-            }
-
-            try {
-                await executeFunnel(phoneKey, funnelId, customerData);
-                res.json({ success: true, message: 'Funil iniciado (PerfectPay)' });
-            } finally {
-                releaseWebhookLock(fullPhone);
-            }
-        } else {
-            res.json({ success: true, message: 'Evento PerfectPay não processado' });
-        }
-
-    } catch (error) {
-        addLog('WEBHOOK_ERROR', `Erro crítico (PerfectPay): ${error.message}`, 
-            { error: error.stack }, LOG_LEVELS.CRITICAL);
-        res.status(500).json({ error: 'Erro interno' });
-    }
-});
-
-// ============ WEBHOOK EVOLUTION ============
-app.post('/webhook/evolution', async (req, res) => {
-    try {
-        res.status(200).send('OK');
-        
-        const data = req.body?.data;
-        if (!data || data.key?.fromMe) return;
-
-        const messageType = data.messageType;
-        const validTypes = ['conversation', 'extendedTextMessage', 'imageMessage', 'audioMessage', 
-                           'videoMessage', 'documentMessage', 'buttonsResponseMessage'];
-        
-        if (!validTypes.includes(messageType)) return;
-
-        const remoteJid = data.key?.remoteJid;
-        if (!remoteJid || remoteJid.includes('@g.us')) return;
-
-        addLog('MESSAGE_RECEIVED', 'Mensagem recebida do WhatsApp', 
-            { from: remoteJid, type: messageType }, LOG_LEVELS.DEBUG);
-
-        const phoneKey = phoneIndex.get(remoteJid);
-        if (!phoneKey) {
-            await checkForPhraseTriggers(data, remoteJid);
-            return;
-        }
-
-        const conv = conversations.get(phoneKey);
-        if (!conv) return;
-
-        if (conv.waiting_for_response) {
-            let userMessage = '';
-            
-            if (messageType === 'conversation') {
-                userMessage = data.message?.conversation || '';
-            } else if (messageType === 'extendedTextMessage') {
-                userMessage = data.message?.extendedTextMessage?.text || '';
-            } else if (messageType === 'buttonsResponseMessage') {
-                userMessage = data.message?.buttonsResponseMessage?.selectedDisplayText || '';
-            }
-
-            if (userMessage) {
-                conv.lastReply = userMessage;
-                conv.waiting_for_response = false;
-                await saveConversationsToFile();
-
-                addLog('USER_REPLY', 'Resposta do cliente recebida', 
-                    { phoneKey, reply: userMessage }, LOG_LEVELS.INFO);
-
-                const funnel = funis.get(conv.funnelId);
-                if (funnel && funnel.steps) {
-                    const nextStepIndex = conv.stepIndex + 1;
-                    if (nextStepIndex < funnel.steps.length) {
-                        conv.stepIndex = nextStepIndex;
-                        await saveConversationsToFile();
-
-                        const phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-                        const customerData = {
-                            phone: phoneNumber,
-                            name: conv.customerName,
-                            productType: conv.productType,
-                            orderCode: conv.orderCode,
-                            amount: conv.amount,
-                            source: conv.source
-                        };
-
-                        for (let i = nextStepIndex; i < funnel.steps.length; i++) {
-                            const step = funnel.steps[i];
-                            const currentConv = conversations.get(phoneKey);
-
-                            if (!currentConv || currentConv.canceled || currentConv.completed) break;
-
-                            currentConv.stepIndex = i;
-                            await saveConversationsToFile();
-
-                            if (step.delay && step.delay > 0) {
-                                await new Promise(resolve => setTimeout(resolve, step.delay));
-                            }
-
-                            try {
-                                if (step.type === 'text' && step.content) {
-                                    const processedText = step.content
-                                        .replace(/{nome}/gi, customerData.name)
-                                        .replace(/{codigo}/gi, customerData.orderCode)
-                                        .replace(/{valor}/gi, customerData.amount);
-                                    
-                                    await sendMessage(phoneNumber, processedText);
-                                    currentConv.lastSystemMessage = processedText;
-                                } 
-                                else if (step.type === 'image' && step.url) {
-                                    await sendMedia(phoneNumber, step.url, step.caption || '', 'image');
-                                } 
-                                else if (step.type === 'video' && step.url) {
-                                    await sendMedia(phoneNumber, step.url, step.caption || '', 'video');
-                                } 
-                                else if (step.type === 'audio' && step.url) {
-                                    await sendMedia(phoneNumber, step.url, '', 'audio');
-                                } 
-                                else if (step.type === 'document' && step.url) {
-                                    await sendMedia(phoneNumber, step.url, step.caption || '', 'document');
-                                } 
-                                else if (step.type === 'button' && step.content && step.buttons) {
-                                    await sendButton(phoneNumber, step.content, step.buttons);
-                                } 
-                                else if (step.type === 'group' && step.groupId) {
-                                    await addToGroup(phoneNumber, step.groupId);
-                                }
-                                else if (step.type === 'wait_reply') {
-                                    currentConv.waiting_for_response = true;
-                                    await saveConversationsToFile();
-                                    return;
-                                }
-
-                                await saveConversationsToFile();
-
-                            } catch (error) {
-                                addLog('FUNNEL_STEP_ERROR', `Erro ao continuar funil`, 
-                                    { phoneKey, step: i, error: error.message }, LOG_LEVELS.ERROR);
-                            }
-
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                        }
-
-                        const finalConv = conversations.get(phoneKey);
-                        if (finalConv && !finalConv.canceled) {
-                            finalConv.completed = true;
-                            await saveConversationsToFile();
-                            addLog('FUNNEL_COMPLETED', 'Funil concluído após resposta', 
-                                { phoneKey }, LOG_LEVELS.INFO);
-                        }
-                    }
-                }
-            }
-        }
-
-    } catch (error) {
-        addLog('EVOLUTION_WEBHOOK_ERROR', `Erro: ${error.message}`, 
-            { error: error.stack }, LOG_LEVELS.ERROR);
-    }
-});
-
-async function checkForPhraseTriggers(data, remoteJid) {
-    try {
-        const messageType = data.messageType;
-        let userMessage = '';
-
-        if (messageType === 'conversation') {
-            userMessage = data.message?.conversation || '';
-        } else if (messageType === 'extendedTextMessage') {
-            userMessage = data.message?.extendedTextMessage?.text || '';
-        }
-
-        if (!userMessage) return;
-
-        const normalizedMessage = userMessage.toLowerCase().trim();
-        
-        for (const [triggerPhrase, triggerData] of phraseTriggers.entries()) {
-            if (!triggerData.active) continue;
-
-            const normalizedTrigger = triggerPhrase.toLowerCase();
-            const triggerWords = normalizedTrigger.split(/\s+/);
-            
-            let foundIndex = -1;
-            let allWordsFound = true;
-            
-            for (const word of triggerWords) {
-                const wordIndex = normalizedMessage.indexOf(word, foundIndex + 1);
-                if (wordIndex === -1 || (foundIndex !== -1 && wordIndex < foundIndex)) {
-                    allWordsFound = false;
-                    break;
-                }
-                foundIndex = wordIndex;
-            }
-
-            if (allWordsFound) {
-                const cooldownKey = `${remoteJid}_${triggerPhrase}`;
-                const lastTrigger = phraseCooldowns.get(cooldownKey);
-                
-                if (lastTrigger && (Date.now() - lastTrigger < PHRASE_COOLDOWN)) {
-                    addLog('PHRASE_COOLDOWN', 'Frase em cooldown', 
-                        { phrase: triggerPhrase, remoteJid }, LOG_LEVELS.DEBUG);
-                    continue;
-                }
-
-                addLog('PHRASE_TRIGGERED', `Frase detectada: "${triggerPhrase}"`, 
-                    { phrase: triggerPhrase, funnelId: triggerData.funnelId, remoteJid }, LOG_LEVELS.INFO);
-
-                phraseCooldowns.set(cooldownKey, Date.now());
-                triggerData.triggerCount = (triggerData.triggerCount || 0) + 1;
-                await savePhrasesToFile();
-
-                const phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-                const phoneKey = uuidv4();
-
-                const customerData = {
-                    phone: phoneNumber,
-                    name: data.pushName || 'Cliente',
-                    productType: 'PHRASE_TRIGGER',
-                    orderCode: '',
-                    amount: '',
-                    source: 'phrase_trigger'
-                };
-
-                await executeFunnel(phoneKey, triggerData.funnelId, customerData);
-                break;
-            }
-        }
-
-        for (const [triggerPhrase, triggerData] of manualTriggers.entries()) {
-            if (!triggerData.active) continue;
-
-            const normalizedTrigger = triggerPhrase.toLowerCase().trim();
-            
-            if (normalizedMessage === normalizedTrigger) {
-                addLog('MANUAL_TRIGGER_ACTIVATED', `Frase manual detectada: "${triggerPhrase}"`, 
-                    { phrase: triggerPhrase, funnelId: triggerData.funnelId, remoteJid }, LOG_LEVELS.INFO);
-
-                triggerData.triggerCount = (triggerData.triggerCount || 0) + 1;
-                await saveManualTriggersToFile();
-
-                const phoneNumber = remoteJid.replace('@s.whatsapp.net', '');
-                const phoneKey = uuidv4();
-
-                const customerData = {
-                    phone: phoneNumber,
-                    name: data.pushName || 'Cliente',
-                    productType: 'MANUAL_TRIGGER',
-                    orderCode: '',
-                    amount: '',
-                    source: 'manual_trigger'
-                };
-
-                await executeFunnel(phoneKey, triggerData.funnelId, customerData);
-                break;
-            }
-        }
-
-    } catch (error) {
-        addLog('PHRASE_CHECK_ERROR', `Erro ao verificar frases: ${error.message}`, 
-            { error: error.stack }, LOG_LEVELS.ERROR);
+    if (!cleaned.startsWith('55')) {
+        phoneIndex.set('55' + cleaned, phoneKey);
     }
 }
 
-// ============ ROTAS DA API ============
-app.get('/api/stats', (req, res) => {
-    const activeConversations = Array.from(conversations.values()).filter(c => !c.completed && !c.canceled).length;
-    const completedConversations = Array.from(conversations.values()).filter(c => c.completed).length;
-    const canceledConversations = Array.from(conversations.values()).filter(c => c.canceled).length;
-    const pixWaiting = Array.from(conversations.values()).filter(c => c.pixWaiting && !c.completed && !c.canceled).length;
+function findConversationByPhone(phone) {
+    const phoneKey = extractPhoneKey(phone);
+    if (!phoneKey || phoneKey.length !== 8) return null;
+    const conversation = conversations.get(phoneKey);
+    if (conversation) {
+        registerPhone(phone, phoneKey);
+    }
+    return conversation;
+}
 
+function phoneToRemoteJid(phone) {
+    const cleaned = phone.replace(/\D/g, '');
+    let formatted = cleaned;
+    if (!formatted.startsWith('55')) {
+        formatted = '55' + formatted;
+    }
+    if (formatted.length === 12) {
+        const ddd = formatted.substring(2, 4);
+        const numero = formatted.substring(4);
+        formatted = '55' + ddd + '9' + numero;
+    }
+    return formatted + '@s.whatsapp.net';
+}
+
+function extractMessageText(message) {
+    if (!message) return '';
+    if (message.conversation) return message.conversation;
+    if (message.extendedTextMessage?.text) return message.extendedTextMessage.text;
+    if (message.imageMessage?.caption) return message.imageMessage.caption;
+    if (message.videoMessage?.caption) return message.videoMessage.caption;
+    return '[MENSAGEM]';
+}
+
+function validateConversationState(conversation, phoneKey) {
+    const issues = [];
+    
+    if (!conversation.funnelId) {
+        issues.push('Sem funnelId');
+    }
+    
+    if (conversation.stepIndex < 0 && !conversation.pixWaiting) {
+        issues.push('StepIndex negativo sem PIX waiting');
+    }
+    
+    const funnel = funis.get(conversation.funnelId);
+    if (!funnel) {
+        issues.push('Funil não encontrado: ' + conversation.funnelId);
+    } else if (conversation.stepIndex >= funnel.steps.length) {
+        issues.push('StepIndex maior que steps do funil');
+    }
+    
+    if (issues.length > 0) {
+        addLog('CONVERSATION_VALIDATION_FAILED', issues.join(', '), 
+            { phoneKey, conversation }, LOG_LEVELS.ERROR);
+        return false;
+    }
+    
+    return true;
+}
+
+function checkPhraseTrigger(phoneKey, messageText) {
+    const normalizedMessage = messageText.toLowerCase().trim();
+    
+    addLog('PHRASE_CHECK_START', `Mensagem normalizada: "${normalizedMessage}"`, 
+        { phoneKey, original: messageText }, LOG_LEVELS.DEBUG);
+    
+    for (const [phrase, data] of phraseTriggers.entries()) {
+        if (!data.active) {
+            continue;
+        }
+        
+        const normalizedPhrase = phrase.toLowerCase().trim();
+        
+        if (normalizedMessage.includes(normalizedPhrase)) {
+            const cooldownKey = `${phoneKey}:${phrase}`;
+            const lastTrigger = phraseCooldowns.get(cooldownKey);
+            
+            if (lastTrigger && (Date.now() - lastTrigger) < PHRASE_COOLDOWN) {
+                const remainingTime = Math.ceil((PHRASE_COOLDOWN - (Date.now() - lastTrigger)) / (60 * 60 * 1000));
+                addLog('PHRASE_COOLDOWN', `Cooldown ativo (${remainingTime}h restantes)`, 
+                    { phoneKey, phrase }, LOG_LEVELS.WARNING);
+                return null;
+            }
+            
+            addLog('PHRASE_TRIGGERED', `Frase detectada: "${phrase}"`, 
+                { phoneKey, funnelId: data.funnelId, messageReceived: normalizedMessage }, LOG_LEVELS.INFO);
+            
+            phraseCooldowns.set(cooldownKey, Date.now());
+            data.triggerCount = (data.triggerCount || 0) + 1;
+            phraseTriggers.set(phrase, data);
+            savePhrasesToFile();
+            
+            return data.funnelId;
+        }
+    }
+    
+    addLog('PHRASE_NOT_FOUND', `Nenhuma frase correspondente`, 
+        { phoneKey, message: normalizedMessage }, LOG_LEVELS.DEBUG);
+    return null;
+}
+
+function checkManualTrigger(messageText) {
+    const normalizedMessage = messageText.toLowerCase().trim();
+    
+    addLog('MANUAL_TRIGGER_CHECK', `Verificando frase manual: "${normalizedMessage}"`, 
+        { original: messageText }, LOG_LEVELS.DEBUG);
+    
+    for (const [phrase, data] of manualTriggers.entries()) {
+        if (!data.active) {
+            continue;
+        }
+        
+        const normalizedPhrase = phrase.toLowerCase().trim();
+        
+        if (normalizedMessage.includes(normalizedPhrase)) {
+            addLog('MANUAL_TRIGGER_DETECTED', `Frase manual detectada: "${phrase}"`, 
+                { funnelId: data.funnelId }, LOG_LEVELS.INFO);
+            
+            data.triggerCount = (data.triggerCount || 0) + 1;
+            manualTriggers.set(phrase, data);
+            saveManualTriggersToFile();
+            
+            return data.funnelId;
+        }
+    }
+    
+    addLog('MANUAL_TRIGGER_NOT_FOUND', `Nenhuma frase manual correspondente`, 
+        { message: normalizedMessage }, LOG_LEVELS.DEBUG);
+    return null;
+}
+
+async function sendToEvolution(instanceName, endpoint, payload) {
+    const url = EVOLUTION_BASE_URL + endpoint + '/' + instanceName;
+    
+    addLog('EVOLUTION_REQUEST', `${endpoint} via ${instanceName}`, 
+        { url, payload }, LOG_LEVELS.DEBUG);
+    
+    try {
+        const response = await axios.post(url, payload, {
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': EVOLUTION_API_KEY
+            },
+            timeout: 15000
+        });
+        
+        addLog('EVOLUTION_RESPONSE_OK', `Status ${response.status}`, 
+            { instanceName, endpoint }, LOG_LEVELS.DEBUG);
+        
+        return { ok: true, data: response.data };
+    } catch (error) {
+        addLog('EVOLUTION_REQUEST_FAILED', error.message, 
+            { instanceName, endpoint, status: error.response?.status, 
+              errorData: error.response?.data }, LOG_LEVELS.ERROR);
+        
+        return { 
+            ok: false, 
+            error: error.response?.data || error.message,
+            status: error.response?.status
+        };
+    }
+}
+
+async function sendText(remoteJid, text, instanceName) {
+    return await sendToEvolution(instanceName, '/message/sendText', {
+        number: remoteJid.replace('@s.whatsapp.net', ''),
+        text: text
+    });
+}
+
+async function sendImage(remoteJid, imageUrl, caption, instanceName) {
+    return await sendToEvolution(instanceName, '/message/sendMedia', {
+        number: remoteJid.replace('@s.whatsapp.net', ''),
+        mediatype: 'image',
+        media: imageUrl,
+        caption: caption || ''
+    });
+}
+
+async function sendVideo(remoteJid, videoUrl, caption, instanceName) {
+    return await sendToEvolution(instanceName, '/message/sendMedia', {
+        number: remoteJid.replace('@s.whatsapp.net', ''),
+        mediatype: 'video',
+        media: videoUrl,
+        caption: caption || ''
+    });
+}
+
+async function sendAudio(remoteJid, audioUrl, instanceName) {
+    try {
+        addLog('AUDIO_DOWNLOAD_START', `Baixando de ${audioUrl}`, null, LOG_LEVELS.DEBUG);
+        
+        const audioResponse = await axios.get(audioUrl, {
+            responseType: 'arraybuffer',
+            timeout: 30000,
+            headers: { 'User-Agent': 'Mozilla/5.0' }
+        });
+        
+        const base64Audio = Buffer.from(audioResponse.data, 'binary').toString('base64');
+        const audioBase64 = `data:audio/mpeg;base64,${base64Audio}`;
+        
+        addLog('AUDIO_CONVERTED', `Base64 criado (${Math.round(base64Audio.length / 1024)}KB)`, 
+            null, LOG_LEVELS.DEBUG);
+        
+        const result = await sendToEvolution(instanceName, '/message/sendWhatsAppAudio', {
+            number: remoteJid.replace('@s.whatsapp.net', ''),
+            audio: audioBase64,
+            delay: 1200,
+            encoding: true
+        });
+        
+        if (result.ok) {
+            addLog('AUDIO_SENT_PTT', 'Áudio enviado como PTT', null, LOG_LEVELS.DEBUG);
+            return result;
+        }
+        
+        addLog('AUDIO_FALLBACK_MEDIA', 'Tentando formato alternativo', null, LOG_LEVELS.WARNING);
+        return await sendToEvolution(instanceName, '/message/sendMedia', {
+            number: remoteJid.replace('@s.whatsapp.net', ''),
+            mediatype: 'audio',
+            media: audioBase64,
+            mimetype: 'audio/mpeg'
+        });
+    } catch (error) {
+        addLog('AUDIO_ERROR', error.message, { audioUrl }, LOG_LEVELS.ERROR);
+        addLog('AUDIO_FALLBACK_URL', 'Usando URL direta', null, LOG_LEVELS.WARNING);
+        
+        return await sendToEvolution(instanceName, '/message/sendWhatsAppAudio', {
+            number: remoteJid.replace('@s.whatsapp.net', ''),
+            audio: audioUrl,
+            delay: 1200
+        });
+    }
+}
+
+async function sendWithFallback(phoneKey, remoteJid, type, text, mediaUrl, isFirstMessage = false) {
+    let instancesToTry = [...INSTANCES];
+    const stickyInstance = stickyInstances.get(phoneKey);
+    
+    if (stickyInstance) {
+        instancesToTry = [stickyInstance, ...INSTANCES.filter(i => i !== stickyInstance)];
+        addLog('SEND_USING_STICKY', `Sticky instance: ${stickyInstance}`, 
+            { phoneKey, isFirstMessage }, LOG_LEVELS.DEBUG);
+    } else if (isFirstMessage) {
+        const nextIndex = (lastSuccessfulInstanceIndex + 1) % INSTANCES.length;
+        instancesToTry = [...INSTANCES.slice(nextIndex), ...INSTANCES.slice(0, nextIndex)];
+        addLog('SEND_USING_ROTATION', `Próxima: ${instancesToTry[0]}`, 
+            { phoneKey, nextIndex }, LOG_LEVELS.DEBUG);
+    }
+    
+    let lastError = null;
+    const maxAttempts = 3;
+    
+    for (const instanceName of instancesToTry) {
+        for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                let result;
+                
+                if (type === 'text') {
+                    result = await sendText(remoteJid, text, instanceName);
+                } else if (type === 'image') {
+                    result = await sendImage(remoteJid, mediaUrl, text || '', instanceName);
+                } else if (type === 'video') {
+                    result = await sendVideo(remoteJid, mediaUrl, text || '', instanceName);
+                } else if (type === 'audio') {
+                    result = await sendAudio(remoteJid, mediaUrl, instanceName);
+                }
+                
+                if (result && result.ok) {
+                    stickyInstances.set(phoneKey, instanceName);
+                    if (isFirstMessage && !stickyInstance) {
+                        lastSuccessfulInstanceIndex = INSTANCES.indexOf(instanceName);
+                    }
+                    
+                    addLog('SEND_SUCCESS', `Mensagem ${type} enviada`, 
+                        { phoneKey, instanceName, attempt }, LOG_LEVELS.INFO);
+                    
+                    return { success: true, instanceName };
+                }
+                
+                lastError = result.error;
+                addLog('SEND_ATTEMPT_FAILED', `Tentativa ${attempt}/${maxAttempts}`, 
+                    { phoneKey, instanceName, error: lastError }, LOG_LEVELS.WARNING);
+                
+                if (attempt < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            } catch (error) {
+                lastError = error.message;
+                addLog('SEND_EXCEPTION', error.message, 
+                    { phoneKey, instanceName, attempt, stack: error.stack }, LOG_LEVELS.ERROR);
+                
+                if (attempt < maxAttempts) {
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                }
+            }
+        }
+    }
+    
+    addLog('SEND_ALL_FAILED', 'Todas instâncias falharam', 
+        { phoneKey, lastError, triedInstances: instancesToTry.length }, LOG_LEVELS.CRITICAL);
+    
+    const conversation = conversations.get(phoneKey);
+    if (conversation) {
+        conversation.hasError = true;
+        conversation.errorMessage = lastError;
+        conversations.set(phoneKey, conversation);
+    }
+    
+    return { success: false, error: lastError };
+}
+
+async function createPixWaitingConversation(phoneKey, remoteJid, orderCode, customerName, productType, amount) {
+    const funnelId = productType === 'CS' ? 'CS_PIX' : 'FB_PIX';
+    
+    const conversation = {
+        phoneKey,
+        remoteJid,
+        funnelId,
+        stepIndex: -1,
+        orderCode,
+        customerName,
+        productType,
+        amount,
+        waiting_for_response: false,
+        pixWaiting: true,
+        createdAt: new Date(),
+        lastSystemMessage: null,
+        lastReply: null,
+        canceled: false,
+        completed: false,
+        source: 'kirvano'
+    };
+    
+    conversations.set(phoneKey, conversation);
+    addLog('PIX_WAITING_CREATED', `PIX em espera`, 
+        { phoneKey, orderCode, productType }, LOG_LEVELS.INFO);
+    
+    const timeout = setTimeout(async () => {
+        const conv = conversations.get(phoneKey);
+        if (conv && conv.orderCode === orderCode && !conv.canceled && conv.pixWaiting) {
+            addLog('PIX_TIMEOUT_TRIGGERED', 'Timeout disparado', 
+                { phoneKey, orderCode }, LOG_LEVELS.INFO);
+            
+            conv.pixWaiting = false;
+            conv.stepIndex = 0;
+            conversations.set(phoneKey, conv);
+            await sendStep(phoneKey);
+        }
+        pixTimeouts.delete(phoneKey);
+    }, PIX_TIMEOUT);
+    
+    pixTimeouts.set(phoneKey, { timeout, orderCode, createdAt: new Date() });
+}
+
+async function transferPixToApproved(phoneKey, remoteJid, orderCode, customerName, productType, amount) {
+    const pixConv = conversations.get(phoneKey);
+    
+    if (pixConv) {
+        pixConv.canceled = true;
+        pixConv.canceledAt = new Date();
+        pixConv.cancelReason = 'PAYMENT_APPROVED';
+        conversations.set(phoneKey, pixConv);
+    }
+    
+    const pixTimeout = pixTimeouts.get(phoneKey);
+    if (pixTimeout) {
+        clearTimeout(pixTimeout.timeout);
+        pixTimeouts.delete(phoneKey);
+        addLog('PIX_TIMEOUT_CANCELED', 'Timeout cancelado', 
+            { phoneKey, orderCode }, LOG_LEVELS.INFO);
+    }
+    
+    let startingStep = 0;
+    
+    if (pixConv && pixConv.stepIndex >= 0) {
+        startingStep = 3;
+        addLog('TRANSFER_SKIP_SIMILAR', 'Cliente interagiu, começando passo 3', 
+            { phoneKey }, LOG_LEVELS.INFO);
+    } else {
+        addLog('TRANSFER_FROM_BEGINNING', 'Cliente não interagiu, começando do início', 
+            { phoneKey }, LOG_LEVELS.INFO);
+    }
+    
+    const funnelId = productType === 'CS' ? 'CS_APROVADA' : 'FB_APROVADA';
+    
+    const approvedConv = {
+        phoneKey,
+        remoteJid,
+        funnelId,
+        stepIndex: startingStep,
+        orderCode,
+        customerName,
+        productType,
+        amount,
+        waiting_for_response: false,
+        createdAt: new Date(),
+        lastSystemMessage: null,
+        lastReply: null,
+        canceled: false,
+        completed: false,
+        transferredFromPix: true,
+        previousFunnel: productType === 'CS' ? 'CS_PIX' : 'FB_PIX',
+        source: 'kirvano'
+    };
+    
+    conversations.set(phoneKey, approvedConv);
+    addLog('TRANSFER_PIX_TO_APPROVED', 'Transferido para funil aprovado', 
+        { phoneKey, startingStep, productType }, LOG_LEVELS.INFO);
+    
+    await sendStep(phoneKey);
+}
+
+async function startFunnel(phoneKey, remoteJid, funnelId, orderCode, customerName, productType, amount, source = 'kirvano') {
+    const conversation = {
+        phoneKey,
+        remoteJid,
+        funnelId,
+        stepIndex: 0,
+        orderCode,
+        customerName,
+        productType,
+        amount,
+        waiting_for_response: false,
+        createdAt: new Date(),
+        lastSystemMessage: null,
+        lastReply: null,
+        canceled: false,
+        completed: false,
+        source
+    };
+    
+    conversations.set(phoneKey, conversation);
+    addLog('FUNNEL_START', `Iniciando funil ${funnelId}`, 
+        { phoneKey, orderCode, source }, LOG_LEVELS.INFO);
+    
+    await sendStep(phoneKey);
+}
+
+async function sendStep(phoneKey) {
+    const conversation = conversations.get(phoneKey);
+    
+    if (!conversation) {
+        addLog('STEP_NO_CONVERSATION', 'Conversa não encontrada', 
+            { phoneKey }, LOG_LEVELS.ERROR);
+        return;
+    }
+    
+    if (!validateConversationState(conversation, phoneKey)) {
+        addLog('STEP_INVALID_STATE', 'Estado inválido detectado', 
+            { phoneKey, conversation }, LOG_LEVELS.ERROR);
+        return;
+    }
+    
+    if (conversation.canceled) {
+        addLog('STEP_CANCELED', 'Conversa cancelada', 
+            { phoneKey }, LOG_LEVELS.WARNING);
+        return;
+    }
+    
+    if (conversation.pixWaiting) {
+        addLog('STEP_PIX_WAITING', 'Aguardando timeout PIX', 
+            { phoneKey }, LOG_LEVELS.DEBUG);
+        return;
+    }
+    
+    const funnel = funis.get(conversation.funnelId);
+    if (!funnel) {
+        addLog('STEP_FUNNEL_NOT_FOUND', `Funil ${conversation.funnelId} não existe`, 
+            { phoneKey }, LOG_LEVELS.ERROR);
+        return;
+    }
+    
+    const step = funnel.steps[conversation.stepIndex];
+    if (!step) {
+        addLog('STEP_NOT_FOUND', `Passo ${conversation.stepIndex} não existe`, 
+            { phoneKey, totalSteps: funnel.steps.length }, LOG_LEVELS.ERROR);
+        return;
+    }
+    
+    const isFirstMessage = conversation.stepIndex === 0 && !conversation.lastSystemMessage;
+    
+    addLog('STEP_SEND_START', `Enviando passo ${conversation.stepIndex}/${funnel.steps.length - 1}`, 
+        { phoneKey, funnelId: conversation.funnelId, stepType: step.type, 
+          waitForReply: step.waitForReply }, LOG_LEVELS.INFO);
+    
+    let result = { success: true };
+    
+    if (step.delayBefore && step.delayBefore > 0) {
+        const delaySeconds = parseInt(step.delayBefore);
+        addLog('STEP_DELAY_BEFORE', `Aguardando ${delaySeconds}s`, 
+            { phoneKey }, LOG_LEVELS.DEBUG);
+        await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
+    }
+    
+    if (step.showTyping && step.type !== 'delay') {
+        addLog('STEP_SHOW_TYPING', 'Mostrando digitando por 3s', 
+            { phoneKey }, LOG_LEVELS.DEBUG);
+        await new Promise(resolve => setTimeout(resolve, 3000));
+    }
+    
+    if (step.type === 'delay') {
+        const delaySeconds = step.delaySeconds || 10;
+        addLog('STEP_DELAY', `Delay de ${delaySeconds}s`, 
+            { phoneKey }, LOG_LEVELS.DEBUG);
+        await new Promise(resolve => setTimeout(resolve, delaySeconds * 1000));
+    } else {
+        result = await sendWithFallback(
+            phoneKey, 
+            conversation.remoteJid, 
+            step.type, 
+            step.text, 
+            step.mediaUrl, 
+            isFirstMessage
+        );
+    }
+    
+    if (result.success) {
+        conversation.lastSystemMessage = new Date();
+        
+        if (step.waitForReply && step.type !== 'delay') {
+            conversation.waiting_for_response = true;
+            conversations.set(phoneKey, conversation);
+            
+            addLog('STEP_WAITING_REPLY', `Aguardando resposta do cliente`, 
+                { phoneKey, stepIndex: conversation.stepIndex }, LOG_LEVELS.INFO);
+        } else {
+            conversations.set(phoneKey, conversation);
+            
+            addLog('STEP_AUTO_ADVANCE', 'Avançando automaticamente', 
+                { phoneKey, currentStep: conversation.stepIndex }, LOG_LEVELS.DEBUG);
+            
+            await advanceConversation(phoneKey, null, 'auto');
+        }
+    } else {
+        addLog('STEP_FAILED', 'Falha no envio', 
+            { phoneKey, error: result.error, stepIndex: conversation.stepIndex }, 
+            LOG_LEVELS.ERROR);
+    }
+}
+
+async function advanceConversation(phoneKey, replyText, reason) {
+    const conversation = conversations.get(phoneKey);
+    
+    if (!conversation) {
+        addLog('ADVANCE_NO_CONVERSATION', 'Conversa não encontrada', 
+            { phoneKey }, LOG_LEVELS.ERROR);
+        return;
+    }
+    
+    if (conversation.canceled) {
+        addLog('ADVANCE_CANCELED', 'Conversa foi cancelada', 
+            { phoneKey }, LOG_LEVELS.WARNING);
+        return;
+    }
+    
+    const funnel = funis.get(conversation.funnelId);
+    if (!funnel) {
+        addLog('ADVANCE_FUNNEL_NOT_FOUND', `Funil ${conversation.funnelId} não existe`, 
+            { phoneKey }, LOG_LEVELS.ERROR);
+        return;
+    }
+    
+    const nextStepIndex = conversation.stepIndex + 1;
+    
+    if (nextStepIndex >= funnel.steps.length) {
+        addLog('FUNNEL_END', `Funil ${conversation.funnelId} concluído`, 
+            { phoneKey, totalSteps: funnel.steps.length }, LOG_LEVELS.INFO);
+        
+        conversation.waiting_for_response = false;
+        conversation.completed = true;
+        conversation.completedAt = new Date();
+        conversations.set(phoneKey, conversation);
+        return;
+    }
+    
+    const previousStep = conversation.stepIndex;
+    conversation.stepIndex = nextStepIndex;
+    conversation.waiting_for_response = false;
+    
+    if (reason === 'reply') {
+        conversation.lastReply = new Date();
+    }
+    
+    conversations.set(phoneKey, conversation);
+    
+    addLog('STEP_ADVANCE', `${previousStep} → ${nextStepIndex}`, 
+        { phoneKey, reason, totalSteps: funnel.steps.length }, LOG_LEVELS.INFO);
+    
+    await sendStep(phoneKey);
+}
+
+app.post('/webhook/kirvano', async (req, res) => {
+    const requestId = Date.now() + Math.random();
+    
+    try {
+        const data = req.body;
+        
+        addLog('KIRVANO_WEBHOOK_RECEIVED', 'Webhook Kirvano recebido', 
+            { requestId, body: data }, LOG_LEVELS.INFO);
+        
+        const event = String(data.event || '').toUpperCase();
+        const status = String(data.status || data.payment_status || '').toUpperCase();
+        const method = String(data.payment?.method || data.payment_method || '').toUpperCase();
+        
+        const saleId = data.sale_id || data.checkout_id;
+        const orderCode = saleId || 'ORDER_' + Date.now();
+        const customerName = data.customer?.name || 'Cliente';
+        const customerPhone = data.customer?.phone_number || '';
+        const totalPrice = data.total_price || 'R$ 0,00';
+        
+        const phoneKey = extractPhoneKey(customerPhone);
+        
+        if (!phoneKey || phoneKey.length !== 8) {
+            addLog('KIRVANO_INVALID_PHONE', 'Telefone inválido', 
+                { requestId, phone: customerPhone }, LOG_LEVELS.WARNING);
+            return res.json({ success: false, message: 'Telefone inválido' });
+        }
+        
+        const remoteJid = phoneToRemoteJid(customerPhone);
+        registerPhone(customerPhone, phoneKey);
+        
+        const products = data.products || [];
+        let productType = 'CS';
+        
+        for (const product of products) {
+            if (product.offer_id && PRODUCT_MAPPING[product.offer_id]) {
+                productType = PRODUCT_MAPPING[product.offer_id];
+                break;
+            }
+        }
+        
+        addLog('KIRVANO_EVENT', `${event} - ${customerName}`, 
+            { requestId, orderCode, phoneKey, method, productType }, LOG_LEVELS.INFO);
+        
+        const isApproved = event.includes('APPROVED') || event.includes('PAID') || status === 'APPROVED';
+        const isPix = method.includes('PIX') || event.includes('PIX');
+        
+        if (isApproved) {
+            const existingConv = conversations.get(phoneKey);
+            const isPixFunnel = existingConv && (existingConv.funnelId === 'CS_PIX' || existingConv.funnelId === 'FB_PIX');
+            
+            if (isPixFunnel) {
+                addLog('KIRVANO_PIX_TO_APPROVED', 'Cliente pagou PIX', 
+                    { requestId, phoneKey, orderCode, productType }, LOG_LEVELS.INFO);
+                await transferPixToApproved(phoneKey, remoteJid, orderCode, customerName, productType, totalPrice);
+            } else {
+                addLog('KIRVANO_DIRECT_APPROVED', 'Pagamento aprovado direto', 
+                    { requestId, phoneKey, orderCode, productType }, LOG_LEVELS.INFO);
+                
+                const pixTimeout = pixTimeouts.get(phoneKey);
+                if (pixTimeout) {
+                    clearTimeout(pixTimeout.timeout);
+                    pixTimeouts.delete(phoneKey);
+                }
+                
+                const funnelId = productType === 'CS' ? 'CS_APROVADA' : 'FB_APROVADA';
+                await startFunnel(phoneKey, remoteJid, funnelId, orderCode, customerName, productType, totalPrice, 'kirvano');
+            }
+        } else if (isPix && event.includes('GENERATED')) {
+            addLog('KIRVANO_PIX_GENERATED', 'PIX gerado', 
+                { requestId, phoneKey, orderCode, productType }, LOG_LEVELS.INFO);
+            
+            const existingConv = conversations.get(phoneKey);
+            if (existingConv && !existingConv.canceled) {
+                addLog('KIRVANO_PIX_DUPLICATE', 'Conversa já existe', 
+                    { requestId, phoneKey }, LOG_LEVELS.WARNING);
+                return res.json({ success: true, message: 'Conversa já existe' });
+            }
+            
+            await createPixWaitingConversation(phoneKey, remoteJid, orderCode, customerName, productType, totalPrice);
+        }
+        
+        res.json({ success: true, phoneKey, productType, requestId });
+        
+    } catch (error) {
+        addLog('KIRVANO_ERROR', error.message, 
+            { requestId, stack: error.stack }, LOG_LEVELS.CRITICAL);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/webhook/perfect', async (req, res) => {
+    const requestId = Date.now() + Math.random();
+    
+    try {
+        const data = req.body;
+        
+        addLog('PERFECTPAY_WEBHOOK_RECEIVED', 'Webhook PerfectPay recebido', 
+            { requestId, body: data }, LOG_LEVELS.INFO);
+        
+        const planCode = data.plan?.code;
+        const saleStatus = data.sale_status_enum_key;
+        const saleCode = data.code || 'ORDER_' + Date.now();
+        const customerName = data.customer?.full_name || 'Cliente';
+        const phoneArea = data.customer?.phone_area_code || '';
+        const phoneNumber = data.customer?.phone_number || '';
+        const totalPrice = data.sale_amount ? `R$ ${data.sale_amount.toFixed(2)}` : 'R$ 0,00';
+        
+        if (!planCode || !PERFECTPAY_PLANS[planCode]) {
+            addLog('PERFECTPAY_INVALID_PLAN', 'Plano não mapeado', 
+                { requestId, planCode }, LOG_LEVELS.WARNING);
+            return res.json({ success: false, message: 'Plano não configurado' });
+        }
+        
+        const productType = PERFECTPAY_PLANS[planCode];
+        const fullPhone = phoneArea + phoneNumber;
+        const phoneKey = extractPhoneKey(fullPhone);
+        
+        if (!phoneKey || phoneKey.length !== 8) {
+            addLog('PERFECTPAY_INVALID_PHONE', 'Telefone inválido', 
+                { requestId, phone: fullPhone }, LOG_LEVELS.WARNING);
+            return res.json({ success: false, message: 'Telefone inválido' });
+        }
+        
+        const remoteJid = phoneToRemoteJid(fullPhone);
+        registerPhone(fullPhone, phoneKey);
+        
+        addLog('PERFECTPAY_EVENT', `${saleStatus} - ${customerName}`, 
+            { requestId, saleCode, phoneKey, planCode, productType }, LOG_LEVELS.INFO);
+        
+        if (saleStatus === 'approved') {
+            const existingConv = conversations.get(phoneKey);
+            const isPixFunnel = existingConv && (existingConv.funnelId === 'CS_PIX' || existingConv.funnelId === 'FB_PIX');
+            
+            if (isPixFunnel) {
+                addLog('PERFECTPAY_PIX_TO_APPROVED', 'Cliente pagou PIX', 
+                    { requestId, phoneKey, saleCode, productType }, LOG_LEVELS.INFO);
+                await transferPixToApproved(phoneKey, remoteJid, saleCode, customerName, productType, totalPrice);
+            } else {
+                addLog('PERFECTPAY_DIRECT_APPROVED', 'Pagamento aprovado direto', 
+                    { requestId, phoneKey, saleCode, productType }, LOG_LEVELS.INFO);
+                
+                const pixTimeout = pixTimeouts.get(phoneKey);
+                if (pixTimeout) {
+                    clearTimeout(pixTimeout.timeout);
+                    pixTimeouts.delete(phoneKey);
+                }
+                
+                const funnelId = productType === 'CS' ? 'CS_APROVADA' : 'FB_APROVADA';
+                await startFunnel(phoneKey, remoteJid, funnelId, saleCode, customerName, productType, totalPrice, 'perfectpay');
+            }
+        } else if (saleStatus === 'pending') {
+            addLog('PERFECTPAY_PIX_PENDING', 'PIX pendente', 
+                { requestId, phoneKey, saleCode, productType }, LOG_LEVELS.INFO);
+            
+            const existingConv = conversations.get(phoneKey);
+            if (existingConv && !existingConv.canceled) {
+                addLog('PERFECTPAY_PIX_DUPLICATE', 'Conversa já existe', 
+                    { requestId, phoneKey }, LOG_LEVELS.WARNING);
+                return res.json({ success: true, message: 'Conversa já existe' });
+            }
+            
+            await createPixWaitingConversation(phoneKey, remoteJid, saleCode, customerName, productType, totalPrice);
+        }
+        
+        res.json({ success: true, phoneKey, productType, requestId });
+        
+    } catch (error) {
+        addLog('PERFECTPAY_ERROR', error.message, 
+            { requestId, stack: error.stack }, LOG_LEVELS.CRITICAL);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/webhook/evolution', async (req, res) => {
+    const requestId = Date.now() + Math.random();
+    
+    try {
+        const data = req.body;
+        const messageData = data.data;
+        
+        if (!messageData || !messageData.key) {
+            addLog('EVOLUTION_NO_MESSAGE', 'Webhook sem dados', 
+                { requestId }, LOG_LEVELS.DEBUG);
+            return res.json({ success: true });
+        }
+        
+        const remoteJid = messageData.key.remoteJid;
+        const fromMe = messageData.key.fromMe;
+        const messageText = extractMessageText(messageData.message);
+        const instanceName = data.instance || null;
+        
+        const incomingPhone = remoteJid.replace('@s.whatsapp.net', '');
+        const phoneKey = extractPhoneKey(incomingPhone);
+        
+        addLog('EVOLUTION_MESSAGE_RECEIVED', `"${messageText.substring(0, 50)}"`, 
+            { requestId, phoneKey, instanceName, fromMe }, LOG_LEVELS.INFO);
+        
+        if (!phoneKey || phoneKey.length !== 8) {
+            addLog('EVOLUTION_INVALID_PHONE', 'PhoneKey inválido', 
+                { requestId, phone: incomingPhone }, LOG_LEVELS.WARNING);
+            return res.json({ success: true });
+        }
+        
+        if (fromMe) {
+            addLog('EVOLUTION_FROM_ME', 'Mensagem enviada por você', 
+                { requestId, phoneKey, messageText }, LOG_LEVELS.DEBUG);
+            
+            const triggeredFunnelId = checkManualTrigger(messageText);
+            
+            if (triggeredFunnelId) {
+                const funnel = funis.get(triggeredFunnelId);
+                
+                if (funnel && funnel.steps && funnel.steps.length > 0) {
+                    const existingConversation = conversations.get(phoneKey);
+                    
+                    if (existingConversation && !existingConversation.completed && !existingConversation.canceled) {
+                        addLog('MANUAL_TRIGGER_CANCEL_EXISTING', `Cancelando funil atual: ${existingConversation.funnelId}`, 
+                            { requestId, phoneKey, oldFunnel: existingConversation.funnelId, newFunnel: triggeredFunnelId }, 
+                            LOG_LEVELS.WARNING);
+                        
+                        existingConversation.canceled = true;
+                        existingConversation.waiting_for_response = false;
+                        conversations.set(phoneKey, existingConversation);
+                        
+                        if (pixTimeouts.has(phoneKey)) {
+                            clearTimeout(pixTimeouts.get(phoneKey));
+                            pixTimeouts.delete(phoneKey);
+                            addLog('PIX_TIMEOUT_CLEARED', 'Timeout PIX cancelado', 
+                                { phoneKey }, LOG_LEVELS.DEBUG);
+                        }
+                    }
+                    
+                    addLog('MANUAL_TRIGGER_FUNNEL_START', `Disparando funil ${triggeredFunnelId}`, 
+                        { requestId, phoneKey, instanceName, phrase: messageText }, LOG_LEVELS.INFO);
+                    
+                    if (instanceName && INSTANCES.includes(instanceName)) {
+                        stickyInstances.set(phoneKey, instanceName);
+                        addLog('STICKY_INSTANCE_SET', `Sticky: ${instanceName}`, 
+                            { requestId, phoneKey }, LOG_LEVELS.DEBUG);
+                    }
+                    
+                    await startFunnel(
+                        phoneKey, 
+                        remoteJid, 
+                        triggeredFunnelId, 
+                        'MANUAL_' + Date.now(), 
+                        'Cliente', 
+                        'MANUAL', 
+                        '', 
+                        'manual'
+                    );
+                    
+                    return res.json({ success: true, manualTrigger: true });
+                } else {
+                    addLog('MANUAL_TRIGGER_FUNNEL_EMPTY', `Funil ${triggeredFunnelId} vazio`, 
+                        { requestId, phoneKey }, LOG_LEVELS.ERROR);
+                    return res.json({ success: false, error: 'Funil vazio' });
+                }
+            }
+            
+            return res.json({ success: true });
+        }
+        
+        const hasLock = await acquireWebhookLock(phoneKey);
+        if (!hasLock) {
+            addLog('EVOLUTION_LOCK_TIMEOUT', 'Não conseguiu lock', 
+                { requestId, phoneKey }, LOG_LEVELS.ERROR);
+            return res.json({ success: false, message: 'Lock timeout' });
+        }
+        
+        try {
+            const conversation = findConversationByPhone(incomingPhone);
+            
+            if (!conversation || conversation.completed || conversation.canceled) {
+                addLog('EVOLUTION_CHECK_PHRASE', 'Verificando frases-chave', 
+                    { requestId, phoneKey, message: messageText }, LOG_LEVELS.DEBUG);
+                
+                const triggeredFunnelId = checkPhraseTrigger(phoneKey, messageText);
+                
+                if (triggeredFunnelId) {
+                    const funnel = funis.get(triggeredFunnelId);
+                    
+                    if (funnel && funnel.steps && funnel.steps.length > 0) {
+                        addLog('PHRASE_FUNNEL_START', `Iniciando funil ${triggeredFunnelId}`, 
+                            { requestId, phoneKey, instanceName }, LOG_LEVELS.INFO);
+                        
+                        if (instanceName && INSTANCES.includes(instanceName)) {
+                            stickyInstances.set(phoneKey, instanceName);
+                            addLog('STICKY_INSTANCE_SET', `Sticky: ${instanceName}`, 
+                                { requestId, phoneKey }, LOG_LEVELS.DEBUG);
+                        }
+                        
+                        await startFunnel(
+                            phoneKey, 
+                            remoteJid, 
+                            triggeredFunnelId, 
+                            'PHRASE_' + Date.now(), 
+                            'Cliente', 
+                            'PHRASE', 
+                            '', 
+                            'phrase'
+                        );
+                        
+                        return res.json({ success: true, triggered: true });
+                    } else {
+                        addLog('PHRASE_FUNNEL_EMPTY', `Funil ${triggeredFunnelId} vazio`, 
+                            { requestId, phoneKey }, LOG_LEVELS.ERROR);
+                    }
+                }
+            }
+            
+            if (!conversation || conversation.canceled || !conversation.waiting_for_response) {
+                addLog('EVOLUTION_NOT_WAITING', 'Não aguardando resposta', 
+                    { requestId, phoneKey, hasConv: !!conversation, 
+                      canceled: conversation?.canceled, 
+                      waiting: conversation?.waiting_for_response }, LOG_LEVELS.DEBUG);
+                return res.json({ success: true });
+            }
+            
+            addLog('CLIENT_REPLY', `Cliente respondeu`, 
+                { requestId, phoneKey, text: messageText.substring(0, 100), 
+                  stepIndex: conversation.stepIndex }, LOG_LEVELS.INFO);
+            
+            conversation.waiting_for_response = false;
+            conversation.lastReply = new Date();
+            conversations.set(phoneKey, conversation);
+            
+            await advanceConversation(phoneKey, messageText, 'reply');
+            
+            res.json({ success: true });
+            
+        } finally {
+            releaseWebhookLock(phoneKey);
+        }
+        
+    } catch (error) {
+        addLog('EVOLUTION_ERROR', error.message, 
+            { requestId, stack: error.stack }, LOG_LEVELS.CRITICAL);
+        releaseWebhookLock(extractPhoneKey(req.body?.data?.key?.remoteJid || ''));
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/dashboard', (req, res) => {
+    const instanceUsage = {};
+    INSTANCES.forEach(inst => instanceUsage[inst] = 0);
+    stickyInstances.forEach(instance => {
+        if (instanceUsage[instance] !== undefined) instanceUsage[instance]++;
+    });
+    
+    let activeCount = 0, waitingCount = 0, completedCount = 0, canceledCount = 0, errorCount = 0;
+    
+    conversations.forEach(conv => {
+        if (conv.completed) completedCount++;
+        else if (conv.canceled) canceledCount++;
+        else if (conv.hasError) errorCount++;
+        else if (conv.waiting_for_response) waitingCount++;
+        else activeCount++;
+    });
+    
     res.json({
         success: true,
-        stats: {
-            totalConversations: conversations.size,
-            activeConversations,
-            completedConversations,
-            canceledConversations,
-            pixWaiting,
-            activeLocks: webhookLocks.size,
-            stickyInstances: stickyInstances.size,
-            totalFunnels: funis.size,
-            totalPhrases: phraseTriggers.size,
-            totalManualTriggers: manualTriggers.size,
-            recentLogs: logs.length
+        data: {
+            active_conversations: activeCount,
+            waiting_responses: waitingCount,
+            completed_conversations: completedCount,
+            canceled_conversations: canceledCount,
+            error_conversations: errorCount,
+            pending_pix: pixTimeouts.size,
+            total_funnels: funis.size,
+            total_phrases: phraseTriggers.size,
+            total_instances: INSTANCES.length,
+            sticky_instances: stickyInstances.size,
+            instance_distribution: instanceUsage,
+            webhook_locks: webhookLocks.size,
+            total_logs: logs.length
         }
     });
 });
 
 app.get('/api/logs', (req, res) => {
-    const { level, type, limit = 100 } = req.query;
-    let filtered = [...logs];
-
+    const limit = parseInt(req.query.limit) || 100;
+    const level = req.query.level;
+    const type = req.query.type;
+    const phoneKey = req.query.phoneKey;
+    
+    let filteredLogs = logs;
+    
     if (level) {
-        filtered = filtered.filter(log => log.level === level);
+        filteredLogs = filteredLogs.filter(log => log.level === level);
     }
+    
     if (type) {
-        filtered = filtered.filter(log => log.type.includes(type));
+        filteredLogs = filteredLogs.filter(log => log.type.includes(type));
     }
-
-    filtered = filtered.slice(0, parseInt(limit));
-
-    res.json({
-        success: true,
-        total: logs.length,
-        filtered: filtered.length,
-        logs: filtered
+    
+    if (phoneKey) {
+        filteredLogs = filteredLogs.filter(log => 
+            log.data && log.data.includes(phoneKey)
+        );
+    }
+    
+    const recentLogs = filteredLogs.slice(0, limit).map(log => ({
+        id: log.id,
+        timestamp: log.timestamp,
+        type: log.type,
+        level: log.level,
+        message: log.message,
+        data: log.data
+    }));
+    
+    res.json({ 
+        success: true, 
+        data: recentLogs,
+        total: filteredLogs.length,
+        filters: { level, type, phoneKey, limit }
     });
 });
 
-app.delete('/api/logs', (req, res) => {
-    logs = [];
-    saveLogsToFile();
-    addLog('LOGS_CLEARED', 'Logs limpos manualmente', null, LOG_LEVELS.INFO);
-    res.json({ success: true, message: 'Logs limpos com sucesso' });
+app.get('/api/logs/export', (req, res) => {
+    const format = req.query.format || 'json';
+    const filename = `kirvano-logs-${new Date().toISOString().split('T')[0]}`;
+    
+    if (format === 'json') {
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}.json"`);
+        res.send(JSON.stringify(logs, null, 2));
+    } else if (format === 'txt') {
+        res.setHeader('Content-Type', 'text/plain');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}.txt"`);
+        const txtContent = logs.map(log => 
+            `[${log.timestamp}] [${log.level}] ${log.type}: ${log.message}${log.data ? '\n  Data: ' + log.data : ''}`
+        ).join('\n\n');
+        res.send(txtContent);
+    } else {
+        res.status(400).json({ success: false, error: 'Formato inválido' });
+    }
 });
 
 app.get('/api/funnels', (req, res) => {
-    const funnelsList = Array.from(funis.values());
+    const funnelsList = Array.from(funis.values()).map(funnel => ({
+        ...funnel,
+        isDefault: funnel.id.startsWith('CS_') || funnel.id.startsWith('FB_'),
+        stepCount: funnel.steps.length
+    }));
     res.json({ success: true, data: funnelsList });
 });
 
 app.post('/api/funnels', (req, res) => {
-    const { id, name, steps } = req.body;
+    const funnel = req.body;
     
-    if (!id || !name) {
-        return res.status(400).json({ success: false, error: 'ID e nome são obrigatórios' });
+    if (!funnel.id || !funnel.name || !funnel.steps) {
+        return res.status(400).json({ success: false, error: 'Campos obrigatórios faltando' });
     }
-
-    const funnel = {
-        id,
-        name,
-        steps: steps || []
-    };
-
-    funis.set(id, funnel);
-    saveFunnelsToFile();
-    addLog('FUNNEL_CREATED', `Funil criado: ${name}`, { id, stepsCount: steps?.length || 0 }, LOG_LEVELS.INFO);
-
-    res.json({ success: true, message: 'Funil criado com sucesso', funnel });
-});
-
-app.put('/api/funnels/:id', (req, res) => {
-    const { id } = req.params;
-    const { name, steps } = req.body;
-
-    if (!funis.has(id)) {
-        return res.status(404).json({ success: false, error: 'Funil não encontrado' });
+    
+    if (!funnel.id.startsWith('CS_') && !funnel.id.startsWith('FB_') && !funnel.id.startsWith('PHRASE_')) {
+        return res.status(400).json({ success: false, error: 'Apenas funis CS, FB e PHRASE permitidos' });
     }
-
-    const funnel = funis.get(id);
-    if (name) funnel.name = name;
-    if (steps) funnel.steps = steps;
-
-    funis.set(id, funnel);
+    
+    funis.set(funnel.id, funnel);
+    addLog('FUNNEL_SAVED', `Funil ${funnel.id} salvo`, 
+        { funnelId: funnel.id, steps: funnel.steps.length }, LOG_LEVELS.INFO);
     saveFunnelsToFile();
-    addLog('FUNNEL_UPDATED', `Funil atualizado: ${id}`, null, LOG_LEVELS.INFO);
-
-    res.json({ success: true, message: 'Funil atualizado com sucesso', funnel });
+    
+    res.json({ success: true, message: 'Funil salvo', data: funnel });
 });
 
 app.delete('/api/funnels/:id', (req, res) => {
-    const { id } = req.params;
-
-    if (!funis.has(id)) {
-        return res.status(404).json({ success: false, error: 'Funil não encontrado' });
+    const funnelId = req.params.id;
+    
+    if (funnelId.startsWith('CS_') || funnelId.startsWith('FB_')) {
+        return res.status(400).json({ success: false, error: 'Não pode excluir funis padrão CS/FB' });
     }
+    
+    if (funis.has(funnelId)) {
+        funis.delete(funnelId);
+        addLog('FUNNEL_DELETED', `Funil ${funnelId} excluído`, null, LOG_LEVELS.INFO);
+        saveFunnelsToFile();
+        res.json({ success: true, message: 'Funil excluído' });
+    } else {
+        res.status(404).json({ success: false, error: 'Funil não encontrado' });
+    }
+});
 
-    funis.delete(id);
-    saveFunnelsToFile();
-    addLog('FUNNEL_DELETED', `Funil excluído: ${id}`, null, LOG_LEVELS.INFO);
+app.get('/api/funnels/export', (req, res) => {
+    try {
+        const funnelsArray = Array.from(funis.values());
+        const filename = `kirvano-funis-${new Date().toISOString().split('T')[0]}.json`;
+        
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+        res.send(JSON.stringify({
+            version: '5.3',
+            exportDate: new Date().toISOString(),
+            totalFunnels: funnelsArray.length,
+            funnels: funnelsArray
+        }, null, 2));
+        
+        addLog('FUNNELS_EXPORT', `Export: ${funnelsArray.length} funis`, null, LOG_LEVELS.INFO);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
-    res.json({ success: true, message: 'Funil excluído com sucesso' });
+app.post('/api/funnels/import', (req, res) => {
+    try {
+        const importData = req.body;
+        
+        if (!importData.funnels || !Array.isArray(importData.funnels)) {
+            return res.status(400).json({ success: false, error: 'Arquivo inválido' });
+        }
+        
+        let importedCount = 0, skippedCount = 0;
+        
+        importData.funnels.forEach(funnel => {
+            if (funnel.id && funnel.name && funnel.steps && 
+                (funnel.id.startsWith('CS_') || funnel.id.startsWith('FB_') || funnel.id.startsWith('PHRASE_'))) {
+                funis.set(funnel.id, funnel);
+                importedCount++;
+            } else {
+                skippedCount++;
+            }
+        });
+        
+        saveFunnelsToFile();
+        addLog('FUNNELS_IMPORT', `Import: ${importedCount} importados, ${skippedCount} ignorados`, 
+            null, LOG_LEVELS.INFO);
+        
+        res.json({ 
+            success: true, 
+            imported: importedCount,
+            skipped: skippedCount,
+            total: importData.funnels.length
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 app.get('/api/phrases', (req, res) => {
@@ -1265,11 +1507,11 @@ app.post('/api/phrases', (req, res) => {
         triggerCount: 0
     });
     
-    addLog('PHRASE_ADDED', `Frase-chave cadastrada: "${normalizedPhrase}"`, 
+    addLog('PHRASE_ADDED', `Frase cadastrada: "${normalizedPhrase}"`, 
         { funnelId }, LOG_LEVELS.INFO);
     savePhrasesToFile();
     
-    res.json({ success: true, message: 'Frase-chave cadastrada com sucesso' });
+    res.json({ success: true, message: 'Frase cadastrada com sucesso' });
 });
 
 app.put('/api/phrases/:phrase', (req, res) => {
@@ -1294,10 +1536,10 @@ app.put('/api/phrases/:phrase', (req, res) => {
     }
     
     phraseTriggers.set(phrase, data);
-    addLog('PHRASE_UPDATED', `Frase-chave atualizada: "${phrase}"`, null, LOG_LEVELS.INFO);
+    addLog('PHRASE_UPDATED', `Frase atualizada: "${phrase}"`, null, LOG_LEVELS.INFO);
     savePhrasesToFile();
     
-    res.json({ success: true, message: 'Frase-chave atualizada com sucesso' });
+    res.json({ success: true, message: 'Frase atualizada com sucesso' });
 });
 
 app.delete('/api/phrases/:phrase', (req, res) => {
@@ -1305,7 +1547,7 @@ app.delete('/api/phrases/:phrase', (req, res) => {
     
     if (phraseTriggers.has(phrase)) {
         phraseTriggers.delete(phrase);
-        addLog('PHRASE_DELETED', `Frase-chave excluída: "${phrase}"`, null, LOG_LEVELS.INFO);
+        addLog('PHRASE_DELETED', `Frase excluída: "${phrase}"`, null, LOG_LEVELS.INFO);
         savePhrasesToFile();
         res.json({ success: true, message: 'Frase excluída com sucesso' });
     } else {
@@ -1502,27 +1744,28 @@ async function initializeData() {
 
 app.listen(PORT, async () => {
     console.log('='.repeat(70));
-    console.log('🚀 KIRVANO + PERFECTPAY SYSTEM V5.4 - SISTEMA COMPLETO DE FUNIS');
+    console.log('🚀 KIRVANO SYSTEM V5.3 - SISTEMA COMPLETO DE FUNIS');
     console.log('='.repeat(70));
     console.log('Porta:', PORT);
     console.log('Evolution:', EVOLUTION_BASE_URL);
     console.log('Instâncias:', INSTANCES.length);
     console.log('');
-    console.log('✅ NOVIDADES V5.4:');
-    console.log('  1. 🆕 WEBHOOK PERFECTPAY INTEGRADO');
-    console.log('  2. ✅ Suporte para Kirvano e PerfectPay simultaneamente');
-    console.log('  3. ✅ Mesmo funil para ambas plataformas');
-    console.log('  4. ✅ Detecção por código do plano (PerfectPay)');
-    console.log('  5. ✅ Conversão automática PIX→Aprovado em ambas');
+    console.log('✅ NOVIDADES V5.3:');
+    console.log('  1. 🆕 FRASES DE DISPARO MANUAL (você envia → dispara funil)');
+    console.log('  2. ✅ ViewOnce REMOVIDO (não suportado pela Evolution API)');
+    console.log('  3. ✅ Detecção de frases FLEXÍVEL (contém frase na mesma ordem)');
+    console.log('  4. ✅ 15 instâncias (GABY01-GABY15)');
+    console.log('  5. ✅ Sistema de logs completo e exportável');
+    console.log('  6. ✅ Validações extras contra race conditions');
     console.log('');
     console.log('📡 Endpoints:');
     console.log('  POST /webhook/kirvano           - Eventos Kirvano');
     console.log('  POST /webhook/perfect           - Eventos PerfectPay');
     console.log('  POST /webhook/evolution         - Mensagens WhatsApp');
-    console.log('');
-    console.log('🎯 Produtos Configurados:');
-    console.log('  CS: PPLQQMSFI, PPLQQMSFH (PerfectPay)');
-    console.log('  FB: PPLQQM9AP (PerfectPay)');
+    console.log('  GET  /api/manual-triggers       - Listar frases manuais');
+    console.log('  POST /api/manual-triggers       - Criar frase manual');
+    console.log('  PUT  /api/manual-triggers/:id   - Atualizar frase manual');
+    console.log('  DELETE /api/manual-triggers/:id - Deletar frase manual');
     console.log('');
     console.log('🌐 Frontend:');
     console.log('  http://localhost:' + PORT + '           - Dashboard principal');
