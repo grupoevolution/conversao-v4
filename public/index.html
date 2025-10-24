@@ -560,6 +560,100 @@
         .badge-secondary { background: #f3f4f6; color: #374151; }
         .badge-purple { background: #ede9fe; color: #6d28d9; }
 
+        /* CAMPANHAS */
+        .campaign-card {
+            background: white;
+            border: 2px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 16px;
+            transition: all 0.3s;
+        }
+
+        .campaign-card:hover {
+            border-color: #667eea;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+        }
+
+        .campaign-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .campaign-name {
+            font-size: 18px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .campaign-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .campaign-stat {
+            text-align: center;
+        }
+
+        .campaign-stat-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .campaign-stat-label {
+            font-size: 12px;
+            color: #6b7280;
+            margin-top: 4px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #f3f4f6;
+            border-radius: 4px;
+            overflow: hidden;
+            margin-bottom: 16px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #10b981, #059669);
+            transition: width 0.3s;
+        }
+
+        .campaign-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn-small {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .file-upload {
+            border: 2px dashed #e5e7eb;
+            border-radius: 8px;
+            padding: 32px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+            background: #f8fafc;
+        }
+
+        .file-upload input {
+            display: none;
+        }
+
         @media (max-width: 768px) {
             .funnel-editor {
                 flex-direction: column;
@@ -617,6 +711,7 @@
             <div class="main-tabs">
                 <button class="main-tab active" onclick="switchMainTab('editor')">Editor de Funis</button>
                 <button class="main-tab" onclick="switchMainTab('phrases')">Funis por Frase</button>
+                <button class="main-tab" onclick="switchMainTab('campaigns')">🚀 Campanhas</button>
                 <button class="main-tab" onclick="switchMainTab('events')">Conversas</button>
             </div>
 
@@ -743,6 +838,22 @@
                 </div>
             </div>
 
+            <!-- 🚀 CAMPANHAS -->
+            <div id="campaigns" class="tab-content">
+                <div class="events-container">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+                        <h2>🚀 Campanhas de Remarketing</h2>
+                        <button class="btn btn-success" onclick="openCampaignModal()">+ Nova Campanha</button>
+                    </div>
+                    <div id="campaignsContainer">
+                        <div class="empty-workspace">
+                            <h3>Nenhuma campanha ativa</h3>
+                            <p>Crie uma campanha para enviar funis em massa</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- CONVERSAS -->
             <div id="events" class="tab-content">
                 <div class="events-container">
@@ -845,6 +956,93 @@
         </div>
     </div>
 
+    <!-- 🚀 NOVO: MODAL CRIAR CAMPANHA -->
+    <div id="campaignModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">🚀 Criar Nova Campanha de Remarketing</div>
+            
+            <div class="form-group">
+                <label class="form-label">Nome da Campanha:</label>
+                <input type="text" id="campaignName" class="form-input" placeholder="Ex: Remarketing Instagram">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Funil a ser enviado:</label>
+                <select id="campaignFunnel" class="form-input">
+                    <option value="">-- Selecione um funil --</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">⚙️ Configurações de Envio:</label>
+                <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin-top: 8px;">
+                    <div style="margin-bottom: 12px;">
+                        <label style="font-weight: 600; color: #374151; font-size: 14px; display: block; margin-bottom: 6px;">
+                            📊 Limite Diário por Instância:
+                        </label>
+                        <input type="number" id="campaignDailyLimit" class="form-input" value="10" min="1" max="50" style="width: 100px;">
+                        <small style="color: #6b7280; display: block; margin-top: 6px;">
+                            Recomendado: 10 envios/dia (150 total com 15 instâncias)<br>
+                            ⚠️ Valores altos podem causar bloqueio
+                        </small>
+                    </div>
+                    <div style="margin-bottom: 12px;">
+                        <strong style="color: #1f2937;">⏱️ Intervalos Automáticos:</strong>
+                        <div style="color: #6b7280; font-size: 14px; margin-top: 4px;">
+                            • Aleatório entre 40 minutos e 2 horas<br>
+                            • Evita padrões e bloqueios
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-weight: 600; color: #374151; font-size: 14px; display: block; margin-bottom: 8px;">
+                            🕐 Horário de Funcionamento (Brasília):
+                        </label>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                            <div>
+                                <label style="font-size: 13px; color: #6b7280;">Início:</label>
+                                <input type="number" id="campaignStartHour" class="form-input" value="7" min="0" max="23" style="margin-top: 4px;">
+                            </div>
+                            <div>
+                                <label style="font-size: 13px; color: #6b7280;">Fim:</label>
+                                <input type="number" id="campaignEndHour" class="form-input" value="22" min="0" max="23" style="margin-top: 4px;">
+                            </div>
+                        </div>
+                        <small style="color: #6b7280; display: block; margin-top: 6px;">
+                            Envios apenas neste período (Horário de Brasília)
+                        </small>
+                    </div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Lista de Contatos:</label>
+                <div class="file-upload" onclick="document.getElementById('contactsFile').click()">
+                    <input type="file" id="contactsFile" accept=".txt" onchange="handleFileUpload(event)">
+                    <div id="fileUploadText">
+                        <div style="font-size: 48px; margin-bottom: 12px;">📄</div>
+                        <div style="font-weight: 600; margin-bottom: 8px;">Clique para fazer upload</div>
+                        <div style="font-size: 14px; color: #6b7280;">
+                            Arquivo TXT com um número por linha<br>
+                            Formato: 5575999999999 (DDI + DDD + Número)
+                        </div>
+                    </div>
+                </div>
+                <div id="fileInfo" style="margin-top: 12px; display: none;">
+                    <div style="padding: 12px; background: #ecfdf5; border-radius: 8px; border: 1px solid #10b981;">
+                        <strong style="color: #065f46;">✓ Arquivo carregado:</strong>
+                        <div id="fileName" style="color: #047857; margin-top: 4px;"></div>
+                        <div id="contactCount" style="color: #047857; font-size: 14px; margin-top: 4px;"></div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-actions">
+                <button class="btn" style="flex: 1;" onclick="closeCampaignModal()">Cancelar</button>
+                <button class="btn btn-success" style="flex: 1;" onclick="createCampaign()">Criar e Iniciar</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentFunnelData = null;
         let editingStepIndex = -1;
@@ -853,6 +1051,7 @@
         let editingPhrase = null;
         let allManualTriggers = []; // 🆕 NOVO
         let editingManualTrigger = null; // 🆕 NOVO
+        let currentContacts = []; // 🚀 CAMPANHAS
 
         // NAVEGAÇÃO
         function switchMainTab(tabName) {
@@ -866,6 +1065,8 @@
             } else if (tabName === 'phrases') {
                 loadPhrases();
                 loadManualTriggers(); // 🆕 NOVO
+            } else if (tabName === 'campaigns') {
+                loadCampaigns(); // 🚀 CAMPANHAS
             }
         }
 
@@ -1152,7 +1353,7 @@
 
         async function saveFunnel() {
             if (!currentFunnelData) {
-                alert('Selecione um funil para salvar');
+                alert('Selecione um funil primeiro!');
                 return;
             }
             
@@ -1165,28 +1366,31 @@
             for (let i = 0; i < currentFunnelData.steps.length; i++) {
                 const step = currentFunnelData.steps[i];
                 
-                if (step.type === 'text' && (!step.text || step.text.trim() === '')) {
+                if (step.type === 'text' && (!step.content || step.content.trim() === '')) {
                     alert(`Passo ${i + 1}: Texto é obrigatório`);
                     return;
                 }
                 
-                if (step.type === 'delay' && (!step.delaySeconds || step.delaySeconds <= 0)) {
+                if (step.type === 'delay' && (!step.seconds || step.seconds <= 0)) {
                     alert(`Passo ${i + 1}: Tempo de delay é obrigatório`);
                     return;
                 }
                 
-                if ((step.type === 'image' || step.type === 'video' || step.type === 'audio') && 
-                    (!step.mediaUrl || step.mediaUrl.trim() === '')) {
+                if ((step.type === 'image' || step.type === 'video' || step.type === 'audio' || step.type === 'document') && 
+                    (!step.url || step.url.trim() === '')) {
                     alert(`Passo ${i + 1}: URL da mídia é obrigatória`);
                     return;
                 }
             }
             
             try {
-                const response = await fetch('/api/funnels', {
-                    method: 'POST',
+                const response = await fetch(`/api/funnels/${currentFunnelData.id}`, {
+                    method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(currentFunnelData)
+                    body: JSON.stringify({
+                        name: currentFunnelData.name,
+                        steps: currentFunnelData.steps
+                    })
                 });
                 
                 const result = await response.json();
@@ -1786,6 +1990,262 @@
             }
         }
 
+        // 🚀 ============ CAMPANHAS ============
+        async function loadCampaigns() {
+            try {
+                const response = await fetch('/api/campaigns');
+                const result = await response.json();
+                
+                if (result.success && result.data.length > 0) {
+                    const container = document.getElementById('campaignsContainer');
+                    container.innerHTML = result.data.map(campaign => {
+                        const progress = campaign.totalContacts > 0 
+                            ? (campaign.stats.sent / campaign.totalContacts * 100).toFixed(1) 
+                            : 0;
+                        
+                        const statusBadge = campaign.status === 'active' 
+                            ? '<span class="badge badge-success">Ativa</span>'
+                            : campaign.status === 'paused'
+                            ? '<span class="badge badge-warning">Pausada</span>'
+                            : campaign.status === 'completed'
+                            ? '<span class="badge badge-info">Concluída</span>'
+                            : '<span class="badge badge-danger">Cancelada</span>';
+                        
+                        return `
+                            <div class="campaign-card">
+                                <div class="campaign-header">
+                                    <div class="campaign-name">${campaign.name}</div>
+                                    ${statusBadge}
+                                </div>
+                                
+                                <div class="campaign-stats">
+                                    <div class="campaign-stat">
+                                        <div class="campaign-stat-value">${campaign.stats.sent}</div>
+                                        <div class="campaign-stat-label">Enviados</div>
+                                    </div>
+                                    <div class="campaign-stat">
+                                        <div class="campaign-stat-value">${campaign.totalContacts}</div>
+                                        <div class="campaign-stat-label">Total</div>
+                                    </div>
+                                    <div class="campaign-stat">
+                                        <div class="campaign-stat-value">${campaign.stats.errors}</div>
+                                        <div class="campaign-stat-label">Erros</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="progress-bar">
+                                    <div class="progress-fill" style="width: ${progress}%"></div>
+                                </div>
+                                
+                                <div style="font-size: 14px; color: #6b7280; margin-bottom: 16px;">
+                                    <strong>Funil:</strong> ${campaign.funnelName || campaign.funnelId}<br>
+                                    <strong>Progresso:</strong> ${progress}% concluído<br>
+                                    <strong>Criada em:</strong> ${new Date(campaign.createdAt).toLocaleString('pt-BR')}
+                                </div>
+                                
+                                <div class="campaign-actions">
+                                    ${campaign.status === 'active' ? `
+                                        <button class="btn btn-warning btn-small" onclick="pauseCampaign('${campaign.id}')">
+                                            ⏸ Pausar
+                                        </button>
+                                    ` : ''}
+                                    ${campaign.status === 'paused' ? `
+                                        <button class="btn btn-success btn-small" onclick="resumeCampaign('${campaign.id}')">
+                                            ▶ Retomar
+                                        </button>
+                                    ` : ''}
+                                    <button class="btn btn-danger btn-small" onclick="cancelCampaign('${campaign.id}')">
+                                        ✖ Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    document.getElementById('campaignsContainer').innerHTML = `
+                        <div class="empty-workspace">
+                            <h3>Nenhuma campanha ativa</h3>
+                            <p>Crie uma campanha para enviar funis em massa</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                console.error('Erro ao carregar campanhas:', error);
+            }
+        }
+
+        async function openCampaignModal() {
+            // Carregar funis no select
+            const select = document.getElementById('campaignFunnel');
+            select.innerHTML = '<option value="">-- Selecione um funil --</option>';
+            
+            Object.values(allFunnels).forEach(funnel => {
+                select.innerHTML += `<option value="${funnel.id}">${funnel.name}</option>`;
+            });
+            
+            // Limpar campos
+            document.getElementById('campaignName').value = '';
+            document.getElementById('campaignDailyLimit').value = '10';
+            document.getElementById('campaignStartHour').value = '7';
+            document.getElementById('campaignEndHour').value = '22';
+            document.getElementById('contactsFile').value = '';
+            document.getElementById('fileInfo').style.display = 'none';
+            currentContacts = [];
+            
+            document.getElementById('campaignModal').classList.add('active');
+        }
+
+        function closeCampaignModal() {
+            document.getElementById('campaignModal').classList.remove('active');
+        }
+
+        function handleFileUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const content = e.target.result;
+                const lines = content.split('\n')
+                    .map(line => line.trim())
+                    .filter(line => line.length > 0);
+                
+                currentContacts = lines;
+                
+                document.getElementById('fileName').textContent = file.name;
+                document.getElementById('contactCount').textContent = `${lines.length} contatos encontrados`;
+                document.getElementById('fileInfo').style.display = 'block';
+            };
+            reader.readAsText(file);
+        }
+
+        async function createCampaign() {
+            const name = document.getElementById('campaignName').value.trim();
+            const funnelId = document.getElementById('campaignFunnel').value;
+            const dailyLimit = parseInt(document.getElementById('campaignDailyLimit').value);
+            const startHour = parseInt(document.getElementById('campaignStartHour').value);
+            const endHour = parseInt(document.getElementById('campaignEndHour').value);
+            
+            if (!name || !funnelId || currentContacts.length === 0) {
+                alert('Preencha todos os campos e faça upload da lista de contatos!');
+                return;
+            }
+            
+            if (dailyLimit < 1 || dailyLimit > 50) {
+                alert('Limite diário deve estar entre 1 e 50!');
+                return;
+            }
+            
+            if (startHour < 0 || startHour > 23 || endHour < 0 || endHour > 23) {
+                alert('Horários devem estar entre 0 e 23!');
+                return;
+            }
+            
+            if (startHour >= endHour) {
+                alert('Horário de início deve ser menor que horário de fim!');
+                return;
+            }
+            
+            const totalPerDay = dailyLimit * 15;
+            const estimatedDays = Math.ceil(currentContacts.length / totalPerDay);
+            
+            try {
+                const response = await fetch('/api/campaigns', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        name,
+                        funnelId,
+                        contacts: currentContacts,
+                        config: {
+                            dailyLimit,
+                            startHour,
+                            endHour
+                        }
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert(`✅ Campanha "${name}" criada com sucesso!\n\n` +
+                          `📊 Informações:\n` +
+                          `• Total de contatos: ${currentContacts.length}\n` +
+                          `• Envios por dia: ${totalPerDay} (15 instâncias × ${dailyLimit})\n` +
+                          `• Previsão: ~${estimatedDays} dias\n` +
+                          `• Horário: ${startHour}h às ${endHour}h (Brasília)\n` +
+                          `• Intervalos: 40min a 2h (aleatórios)`);
+                    closeCampaignModal();
+                    loadCampaigns();
+                    loadDashboard();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro ao criar campanha: ' + error.message);
+            }
+        }
+
+        async function pauseCampaign(campaignId) {
+            try {
+                const response = await fetch(`/api/campaigns/${campaignId}/pause`, {
+                    method: 'PUT'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('✅ Campanha pausada!');
+                    loadCampaigns();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro ao pausar campanha: ' + error.message);
+            }
+        }
+
+        async function resumeCampaign(campaignId) {
+            try {
+                const response = await fetch(`/api/campaigns/${campaignId}/resume`, {
+                    method: 'PUT'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('✅ Campanha retomada!');
+                    loadCampaigns();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro ao retomar campanha: ' + error.message);
+            }
+        }
+
+        async function cancelCampaign(campaignId) {
+            if (!confirm('Deseja realmente cancelar esta campanha?')) return;
+            
+            try {
+                const response = await fetch(`/api/campaigns/${campaignId}`, {
+                    method: 'DELETE'
+                });
+                
+                const result = await response.json();
+                
+                if (result.success) {
+                    alert('✅ Campanha cancelada!');
+                    loadCampaigns();
+                    loadDashboard();
+                } else {
+                    alert('❌ Erro: ' + result.error);
+                }
+            } catch (error) {
+                alert('❌ Erro ao cancelar campanha: ' + error.message);
+            }
+        }
+
         // INICIALIZAÇÃO
         document.addEventListener('DOMContentLoaded', async function() {
             await loadAllFunnels();
@@ -1821,6 +2281,13 @@
         document.getElementById('manualTriggerModal').addEventListener('click', function(e) {
             if (e.target === this) {
                 closeManualTriggerModal();
+            }
+        });
+
+        // 🚀 NOVO: Fechar modal de campanha
+        document.getElementById('campaignModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeCampaignModal();
             }
         });
     </script>
