@@ -1023,13 +1023,6 @@ function validatePhoneList(phoneList) {
     return { validPhones, invalidPhones };
 }
 
-function getNextInstanceForRemarketing() {
-    const currentIndex = lastSuccessfulInstanceIndex;
-    const nextIndex = (currentIndex + 1) % INSTANCES.length;
-    lastSuccessfulInstanceIndex = nextIndex;
-    return INSTANCES[nextIndex];
-}
-
 function isWithinTimeRange(startHour, startMin, endHour, endMin) {
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -1057,8 +1050,8 @@ async function sendRemarketingMessage(campaign, phone, instanceName) {
     const remoteJid = phone + '@s.whatsapp.net';
     
     try {
-        addLog('REMARKETING_SEND_START', `Enviando para ${phone}`, 
-            { campaignId: campaign.id, phone, instanceName }, LOG_LEVELS.INFO);
+        addLog('REMARKETING_SEND_START', `Tentando enviar para ${phone}`, 
+            { campaignId: campaign.id, phone, attemptInstance: instanceName }, LOG_LEVELS.INFO);
         
         // Setar sticky instance para essa conversa
         stickyInstances.set(phoneKey, instanceName);
@@ -1075,15 +1068,32 @@ async function sendRemarketingMessage(campaign, phone, instanceName) {
             'remarketing'
         );
         
-        // Atualizar contadores
-        const counter = remarketingInstanceCounters.get(instanceName) || 0;
-        remarketingInstanceCounters.set(instanceName, counter + 1);
-        remarketingInstanceLastSend.set(instanceName, Date.now());
+        // Aguardar um pouco para garantir que o envio foi processado
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Verificar se a conversa foi criada e se teve erro
+        const conversation = conversations.get(phoneKey);
+        if (!conversation) {
+            throw new Error('Conversa não foi criada');
+        }
+        
+        if (conversation.hasError) {
+            throw new Error(conversation.errorMessage || 'Erro desconhecido no envio');
+        }
+        
+        // Descobrir qual instância realmente enviou (pode ser diferente da tentada)
+        const actualInstance = stickyInstances.get(phoneKey) || instanceName;
+        
+        // Atualizar contadores da instância que realmente enviou
+        const counter = remarketingInstanceCounters.get(actualInstance) || 0;
+        remarketingInstanceCounters.set(actualInstance, counter + 1);
+        remarketingInstanceLastSend.set(actualInstance, Date.now());
         
         // Atualizar campanha
         campaign.leadsSent.push({
             phone,
-            instanceName,
+            attemptedInstance: instanceName,
+            actualInstance: actualInstance,
             sentAt: new Date().toISOString(),
             status: 'sent'
         });
@@ -1095,9 +1105,10 @@ async function sendRemarketingMessage(campaign, phone, instanceName) {
         await saveRemarketingToFile();
         
         addLog('REMARKETING_SEND_SUCCESS', `Enviado com sucesso`, 
-            { campaignId: campaign.id, phone, instanceName }, LOG_LEVELS.INFO);
+            { campaignId: campaign.id, phone, attemptedInstance: instanceName, actualInstance }, 
+            LOG_LEVELS.INFO);
         
-        return { success: true };
+        return { success: true, actualInstance };
         
     } catch (error) {
         addLog('REMARKETING_SEND_ERROR', `Erro no envio: ${error.message}`, 
@@ -1143,23 +1154,31 @@ async function processRemarketingCampaigns() {
             continue;
         }
         
-        // Tentar enviar próximo lead
-        let instanceAttempts = 0;
-        const maxInstanceAttempts = INSTANCES.length;
+        // Inicializar índice da campanha se não existir
+        if (!campaign.currentInstanceIndex) {
+            campaign.currentInstanceIndex = 0;
+        }
         
-        while (instanceAttempts < maxInstanceAttempts) {
-            const instanceName = getNextInstanceForRemarketing();
+        // Procurar próxima instância disponível
+        let foundAvailableInstance = false;
+        let attemptedInstances = 0;
+        
+        while (!foundAvailableInstance && attemptedInstances < INSTANCES.length) {
+            const instanceName = INSTANCES[campaign.currentInstanceIndex];
             
-            // Verificar limite diário da instância
+            // Verificar limite diário
             const sentToday = remarketingInstanceCounters.get(instanceName) || 0;
             if (sentToday >= campaign.dailyLimitPerInstance) {
                 addLog('REMARKETING_LIMIT_REACHED', `${instanceName} atingiu limite diário`, 
                     { instanceName, sentToday, limit: campaign.dailyLimitPerInstance }, LOG_LEVELS.DEBUG);
-                instanceAttempts++;
+                
+                // Avançar para próxima instância
+                campaign.currentInstanceIndex = (campaign.currentInstanceIndex + 1) % INSTANCES.length;
+                attemptedInstances++;
                 continue;
             }
             
-            // Verificar delay desde último envio
+            // Verificar cooldown da instância
             const lastSend = remarketingInstanceLastSend.get(instanceName);
             if (lastSend) {
                 const minDelay = campaign.delayMin * 60 * 1000;
@@ -1167,38 +1186,53 @@ async function processRemarketingCampaigns() {
                 
                 if (timeSinceLastSend < minDelay) {
                     const remainingMin = Math.ceil((minDelay - timeSinceLastSend) / 60000);
-                    addLog('REMARKETING_COOLDOWN', `${instanceName} em cooldown`, 
-                        { instanceName, remainingMin }, LOG_LEVELS.DEBUG);
-                    instanceAttempts++;
+                    addLog('REMARKETING_COOLDOWN', `${instanceName} em cooldown (${remainingMin}min restantes)`, 
+                        { instanceName, remainingMin, campaignId }, LOG_LEVELS.DEBUG);
+                    
+                    // Avançar para próxima instância
+                    campaign.currentInstanceIndex = (campaign.currentInstanceIndex + 1) % INSTANCES.length;
+                    attemptedInstances++;
                     continue;
                 }
             }
             
-            // Tentar enviar (sem verificar disponibilidade - igual ao resto do sistema)
+            // Instância disponível! Tentar enviar
             const nextPhone = campaign.leads[campaign.progress.sent];
+            
+            addLog('REMARKETING_INSTANCE_SELECTED', `${instanceName} selecionada`, 
+                { instanceName, leadIndex: campaign.progress.sent, phone: nextPhone, campaignId }, 
+                LOG_LEVELS.INFO);
             
             const result = await sendRemarketingMessage(campaign, nextPhone, instanceName);
             
             if (result.success) {
-                // Agendar próximo envio com delay aleatório
-                const delayMin = campaign.delayMin + Math.random() * (campaign.delayMax - campaign.delayMin);
-                const nextSendTime = new Date(Date.now() + delayMin * 60 * 1000);
+                // Sucesso! Avançar para próxima instância na sequência
+                campaign.currentInstanceIndex = (campaign.currentInstanceIndex + 1) % INSTANCES.length;
+                remarketingCampaigns.set(campaignId, campaign);
+                await saveRemarketingToFile();
                 
-                addLog('REMARKETING_NEXT_SCHEDULED', `Próximo envio agendado`, 
-                    { campaignId, nextSendTime: nextSendTime.toISOString(), delayMin: Math.round(delayMin) }, 
+                const delayMin = campaign.delayMin + Math.random() * (campaign.delayMax - campaign.delayMin);
+                addLog('REMARKETING_SUCCESS', `Lead enviado. Próxima instância: ${INSTANCES[campaign.currentInstanceIndex]}`, 
+                    { campaignId, instanceName, nextInstance: INSTANCES[campaign.currentInstanceIndex], 
+                      cooldownMin: Math.round(delayMin) }, 
                     LOG_LEVELS.INFO);
-                break; // Enviou com sucesso, sai do loop
+                
+                foundAvailableInstance = true;
             } else {
-                // Se deu erro, tenta próxima instância
+                // Erro no envio - tentar próxima instância
                 addLog('REMARKETING_INSTANCE_FAILED', `${instanceName} falhou, tentando próxima`, 
-                    { instanceName, error: result.error }, LOG_LEVELS.WARNING);
-                instanceAttempts++;
+                    { instanceName, error: result.error, campaignId }, LOG_LEVELS.WARNING);
+                
+                // Avançar para próxima instância
+                campaign.currentInstanceIndex = (campaign.currentInstanceIndex + 1) % INSTANCES.length;
+                attemptedInstances++;
             }
         }
         
-        if (instanceAttempts >= maxInstanceAttempts) {
-            addLog('REMARKETING_NO_INSTANCE', `Nenhuma instância disponível agora`, 
-                { campaignId }, LOG_LEVELS.WARNING);
+        if (!foundAvailableInstance) {
+            addLog('REMARKETING_NO_INSTANCE_AVAILABLE', 
+                `Todas as instâncias estão indisponíveis (cooldown ou limite). Aguardando próximo ciclo.`, 
+                { campaignId, totalInstances: INSTANCES.length }, LOG_LEVELS.WARNING);
         }
     }
 }
