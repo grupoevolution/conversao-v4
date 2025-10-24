@@ -52,6 +52,7 @@ let phraseTriggers = new Map();
 let phraseCooldowns = new Map();
 let manualTriggers = new Map();
 let manualTriggerCooldowns = new Map();
+let processedMessageIds = new Map(); // Rastrear mensagens já processadas
 
 // ============ REMARKETING ============
 let remarketingCampaigns = new Map();
@@ -466,14 +467,14 @@ function checkManualTrigger(messageText, phoneKey) {
         const normalizedPhrase = phrase.toLowerCase().trim();
         
         if (normalizedMessage.includes(normalizedPhrase)) {
-            // Verificar cooldown de 30 segundos para evitar disparos múltiplos
+            // Verificar cooldown de 24 horas para evitar disparos múltiplos
             const cooldownKey = `${phoneKey}:${phrase}`;
             const lastTrigger = manualTriggerCooldowns.get(cooldownKey);
-            const cooldownTime = 30000; // 30 segundos
+            const cooldownTime = 24 * 60 * 60 * 1000; // 24 horas
             
             if (lastTrigger && (Date.now() - lastTrigger) < cooldownTime) {
-                const remainingSeconds = Math.ceil((cooldownTime - (Date.now() - lastTrigger)) / 1000);
-                addLog('MANUAL_TRIGGER_COOLDOWN', `Cooldown ativo (${remainingSeconds}s restantes)`, 
+                const remainingHours = Math.ceil((cooldownTime - (Date.now() - lastTrigger)) / 3600000);
+                addLog('MANUAL_TRIGGER_COOLDOWN', `Cooldown ativo (${remainingHours}h restantes)`, 
                     { phoneKey, phrase }, LOG_LEVELS.WARNING);
                 return null;
             }
@@ -1459,6 +1460,20 @@ app.post('/webhook/evolution', async (req, res) => {
         if (fromMe) {
             addLog('EVOLUTION_FROM_ME', 'Mensagem enviada por você', 
                 { requestId, phoneKey, messageText }, LOG_LEVELS.DEBUG);
+            
+            // Verificar se a mensagem já foi processada (evitar duplicatas da Evolution)
+            const messageId = messageData.key.id;
+            if (messageId && processedMessageIds.has(messageId)) {
+                addLog('EVOLUTION_MESSAGE_DUPLICATE', 'Mensagem já processada, ignorando', 
+                    { requestId, phoneKey, messageId }, LOG_LEVELS.WARNING);
+                return res.json({ success: true, duplicate: true });
+            }
+            
+            // Registrar messageId processado (limpar após 1 hora)
+            if (messageId) {
+                processedMessageIds.set(messageId, Date.now());
+                setTimeout(() => processedMessageIds.delete(messageId), 3600000); // 1 hora
+            }
             
             const triggeredFunnelId = checkManualTrigger(messageText, phoneKey);
             
