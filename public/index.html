@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Kirvano V5.3 - Sistema Completo de Funis</title>
+    <title>Kirvano V6.0 - Sistema Completo de Funis</title>
     <style>
         * {
             margin: 0;
@@ -581,8 +581,8 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Kirvano - Sistema Completo de Funis <span class="version-badge">v5.3</span></h1>
-            <p>Sistema unificado: Funis Kirvano + Funis por Frase-Chave + Disparo Manual | 15 Instâncias Ativas</p>
+            <h1>Kirvano - Sistema Completo de Funis <span class="version-badge">v6.0</span></h1>
+            <p>Sistema unificado: Funis por Webhooks + Frases-Chave + Envio Manual + Campanhas em Lote | 15 Instâncias Ativas</p>
             
             <div class="stats-grid">
                 <div class="stat-card highlight">
@@ -617,7 +617,7 @@
             <div class="main-tabs">
                 <button class="main-tab active" onclick="switchMainTab('editor')">Editor de Funis</button>
                 <button class="main-tab" onclick="switchMainTab('phrases')">Funis por Frase</button>
-                <button class="main-tab" onclick="switchMainTab('remarketing')">Remarketing</button>
+                <button class="main-tab" onclick="switchMainTab('remarketing')">Campanhas</button>
                 <button class="main-tab" onclick="switchMainTab('events')">Conversas</button>
             </div>
 
@@ -723,22 +723,58 @@
 
                     <hr style="margin: 40px 0; border: none; border-top: 2px solid #e5e7eb;">
 
-                    <!-- 🆕 NOVO: Frases de Disparo Manual -->
+                    <!-- 🆕 ENVIO ÚNICO MANUAL -->
                     <div class="phrases-header">
-                        <h2>🎯 Frases de Disparo Manual (Você → Cliente)</h2>
-                        <button class="btn btn-success" onclick="openManualTriggerModal()">+ Adicionar Frase de Disparo</button>
+                        <h2>📤 Envio Único Manual</h2>
                     </div>
 
-                    <div style="background: #fef3c7; border-left: 4px solid #f59e0b; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
-                        <p style="color: #92400e; margin: 0; font-size: 14px;">
-                            <strong>💡 Como funciona:</strong> Quando VOCÊ enviar uma dessas frases para um cliente no WhatsApp, o sistema automaticamente dispara o funil configurado. Exemplo: você envia "oiie bb" e o funil começa.
+                    <div style="background: #dbeafe; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 8px; margin-bottom: 20px;">
+                        <p style="color: #1e40af; margin: 0; font-size: 14px;">
+                            <strong>💡 Como funciona:</strong> Envie um funil manualmente para um número específico escolhendo a instância que irá disparar.
                         </p>
                     </div>
                     
-                    <div id="manualTriggersListContainer">
-                        <div class="empty-workspace">
-                            <h3>Nenhuma frase de disparo cadastrada</h3>
-                            <p>Clique em "Adicionar Frase de Disparo" para começar</p>
+                    <div style="background: white; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px;">
+                        <div style="display: grid; gap: 16px;">
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">Número do Cliente</label>
+                                <input type="text" id="singleSendPhone" placeholder="5575981734444" 
+                                    style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                                <small style="color: #6b7280; display: block; margin-top: 4px;">Digite o número com DDD (ex: 5575981734444)</small>
+                            </div>
+                            
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">Funil</label>
+                                <select id="singleSendFunnel" style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                                    <option value="">Selecione um funil</option>
+                                </select>
+                            </div>
+                            
+                            <div>
+                                <label style="display: block; margin-bottom: 8px; font-weight: 600; color: #374151;">Instância</label>
+                                <select id="singleSendInstance" style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-size: 14px;">
+                                    <option value="">Selecione uma instância</option>
+                                    <option value="GABY01">GABY01</option>
+                                    <option value="GABY02">GABY02</option>
+                                    <option value="GABY03">GABY03</option>
+                                    <option value="GABY04">GABY04</option>
+                                    <option value="GABY05">GABY05</option>
+                                    <option value="GABY06">GABY06</option>
+                                    <option value="GABY07">GABY07</option>
+                                    <option value="GABY08">GABY08</option>
+                                    <option value="GABY09">GABY09</option>
+                                    <option value="GABY10">GABY10</option>
+                                    <option value="GABY11">GABY11</option>
+                                    <option value="GABY12">GABY12</option>
+                                    <option value="GABY13">GABY13</option>
+                                    <option value="GABY14">GABY14</option>
+                                    <option value="GABY15">GABY15</option>
+                                </select>
+                            </div>
+                            
+                            <button class="btn btn-success" onclick="sendSingleFunnel()" style="padding: 14px; font-size: 16px;">
+                                🚀 Enviar Agora
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -748,67 +784,81 @@
             <div id="remarketing" class="tab-content">
                 <div style="padding: 24px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
-                        <h2 style="margin: 0;">Campanhas de Remarketing</h2>
-                        <button class="btn" onclick="showNewCampaignForm()">+ Nova Campanha</button>
+                        <h2 style="margin: 0;">📨 Campanhas de Envio em Lote</h2>
+                        <button class="btn btn-success" onclick="showNewCampaignForm()">+ Nova Campanha</button>
+                    </div>
+
+                    <div style="background: #dbeafe; border-left: 4px solid #3b82f6; padding: 16px; border-radius: 8px; margin-bottom: 24px;">
+                        <p style="color: #1e40af; margin: 0; font-size: 14px;">
+                            <strong>💡 Como funciona:</strong> Crie campanhas para enviar funis em lote com delay entre envios. Você escolhe UMA instância fixa, define o delay e controla quando iniciar/pausar.
+                        </p>
                     </div>
 
                     <!-- Formulário Nova Campanha -->
-                    <div id="newCampaignForm" style="display: none; background: #f8fafc; padding: 24px; border-radius: 12px; margin-bottom: 24px;">
-                        <h3 style="margin-bottom: 20px;">Nova Campanha de Remarketing</h3>
+                    <div id="newCampaignForm" style="display: none; background: white; border: 1px solid #e5e7eb; padding: 24px; border-radius: 12px; margin-bottom: 24px;">
+                        <h3 style="margin-bottom: 20px;">📨 Nova Campanha de Envio em Lote</h3>
                         
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                        <div style="display: grid; gap: 16px;">
                             <div>
                                 <label style="display: block; font-weight: 600; margin-bottom: 8px;">Nome da Campanha</label>
-                                <input type="text" id="campaignName" placeholder="Ex: Black Friday 2025" 
-                                    style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px;">
+                                <input type="text" id="campaignName" placeholder="Ex: Recuperação de Carrinho" 
+                                    style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
                             </div>
-                            <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 8px;">Funil</label>
-                                <select id="campaignFunnel" style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px;">
-                                    <option value="">Selecione um funil...</option>
-                                </select>
-                            </div>
-                        </div>
 
-                        <div style="margin-bottom: 16px;">
-                            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Lista de Telefones (um por linha)</label>
-                            <textarea id="campaignPhones" placeholder="5575981734444&#10;75981234567&#10;11987654321"
-                                style="width: 100%; min-height: 150px; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; font-family: monospace;"></textarea>
-                        </div>
+                            <div>
+                                <label style="display: block; font-weight: 600; margin-bottom: 8px;">Lista de Telefones (um por linha)</label>
+                                <textarea id="campaignPhones" placeholder="5575981734444&#10;5575981864504&#10;5575992346285"
+                                    style="width: 100%; min-height: 150px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; font-family: monospace; font-size: 13px;"></textarea>
+                                <small style="color: #6b7280; display: block; margin-top: 4px;">Digite um número por linha (ex: 5575981734444)</small>
+                            </div>
 
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px;">
-                            <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 8px;">Horário Início</label>
-                                <input type="time" id="campaignStartTime" value="07:00"
-                                    style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px;">
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                                <div>
+                                    <label style="display: block; font-weight: 600; margin-bottom: 8px;">Funil</label>
+                                    <select id="campaignFunnel" style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                                        <option value="">Selecione um funil</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="display: block; font-weight: 600; margin-bottom: 8px;">Instância</label>
+                                    <select id="campaignInstance" style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                                        <option value="">Selecione uma instância</option>
+                                        <option value="GABY01">GABY01</option>
+                                        <option value="GABY02">GABY02</option>
+                                        <option value="GABY03">GABY03</option>
+                                        <option value="GABY04">GABY04</option>
+                                        <option value="GABY05">GABY05</option>
+                                        <option value="GABY06">GABY06</option>
+                                        <option value="GABY07">GABY07</option>
+                                        <option value="GABY08">GABY08</option>
+                                        <option value="GABY09">GABY09</option>
+                                        <option value="GABY10">GABY10</option>
+                                        <option value="GABY11">GABY11</option>
+                                        <option value="GABY12">GABY12</option>
+                                        <option value="GABY13">GABY13</option>
+                                        <option value="GABY14">GABY14</option>
+                                        <option value="GABY15">GABY15</option>
+                                    </select>
+                                </div>
                             </div>
-                            <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 8px;">Horário Fim</label>
-                                <input type="time" id="campaignEndTime" value="22:00"
-                                    style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px;">
-                            </div>
-                            <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 8px;">Delay Mín (min)</label>
-                                <input type="number" id="campaignDelayMin" value="30" min="1"
-                                    style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px;">
-                            </div>
-                            <div>
-                                <label style="display: block; font-weight: 600; margin-bottom: 8px;">Delay Máx (min)</label>
-                                <input type="number" id="campaignDelayMax" value="55" min="1"
-                                    style="width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px;">
-                            </div>
-                        </div>
 
-                        <div style="margin-bottom: 16px;">
-                            <label style="display: block; font-weight: 600; margin-bottom: 8px;">Limite por Instância/Dia</label>
-                            <input type="number" id="campaignDailyLimit" value="10" min="1" max="50"
-                                style="width: 200px; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px;">
-                            <span style="margin-left: 8px; color: #6b7280;">leads por instância por dia</span>
-                        </div>
+                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                                <div>
+                                    <label style="display: block; font-weight: 600; margin-bottom: 8px;">Delay Mínimo (minutos)</label>
+                                    <input type="number" id="campaignDelayMin" value="45" min="1"
+                                        style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                                </div>
+                                <div>
+                                    <label style="display: block; font-weight: 600; margin-bottom: 8px;">Delay Máximo (minutos)</label>
+                                    <input type="number" id="campaignDelayMax" value="60" min="1"
+                                        style="width: 100%; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
+                                </div>
+                            </div>
 
-                        <div style="display: flex; gap: 12px;">
-                            <button class="btn btn-success" onclick="createCampaign()">Criar Campanha</button>
-                            <button class="btn" style="background: #6b7280;" onclick="hideNewCampaignForm()">Cancelar</button>
+                            <div style="display: flex; gap: 12px;">
+                                <button class="btn btn-success" onclick="createCampaign()">Criar Campanha</button>
+                                <button class="btn" style="background: #6b7280;" onclick="hideNewCampaignForm()">Cancelar</button>
+                            </div>
                         </div>
                     </div>
 
@@ -2273,5 +2323,6 @@
         // Iniciar atualizações ao carregar
         startRemarketingUpdates();
     </script>
+    <script src="/new-functions.js"></script>
 </body>
 </html>
