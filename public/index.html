@@ -2124,11 +2124,8 @@
             const funnelId = document.getElementById('campaignFunnel').value;
             const instanceId = document.getElementById('campaignInstance').value;
             const phoneList = document.getElementById('campaignPhones').value.trim();
-            const startTime = document.getElementById('campaignStartTime').value;
-            const endTime = document.getElementById('campaignEndTime').value;
             const delayMin = parseInt(document.getElementById('campaignDelayMin').value);
             const delayMax = parseInt(document.getElementById('campaignDelayMax').value);
-            const dailyLimit = parseInt(document.getElementById('campaignDailyLimit').value);
 
             if (!name || !funnelId || !phoneList || !instanceId) {
                 alert('⚠️ Preencha todos os campos obrigatórios!');
@@ -2139,9 +2136,6 @@
                 alert('⚠️ Delay mínimo deve ser menor que o máximo!');
                 return;
             }
-
-            const [startHour, startMin] = startTime.split(':').map(Number);
-            const [endHour, endMin] = endTime.split(':').map(Number);
 
             try {
                 const response = await fetch('/api/campaigns', {
@@ -2352,6 +2346,68 @@
 
         // Iniciar atualizações ao carregar
         startRemarketingUpdates();
+
+        // ============ ENVIO ÚNICO MANUAL ============
+        async function sendSingleFunnel() {
+            const phone = document.getElementById('singleSendPhone').value.trim();
+            const funnelId = document.getElementById('singleSendFunnel').value;
+            const instanceId = document.getElementById('singleSendInstance').value;
+
+            // Validações
+            if (!phone) {
+                alert('⚠️ Digite o número do cliente!');
+                return;
+            }
+
+            if (!funnelId) {
+                alert('⚠️ Selecione um funil!');
+                return;
+            }
+
+            if (!instanceId) {
+                alert('⚠️ Selecione uma instância!');
+                return;
+            }
+
+            // Validar formato do número
+            const phoneClean = phone.replace(/\D/g, '');
+            if (phoneClean.length < 10 || phoneClean.length > 13) {
+                alert('⚠️ Número inválido! Use o formato: 5575981734444');
+                return;
+            }
+
+            // Confirmar envio
+            if (!confirm(`Enviar funil "${funnelId}" para ${phone} via ${instanceId}?`)) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/api/send-single', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        phone: phoneClean,
+                        funnelId: funnelId,
+                        instanceName: instanceId
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('✅ Funil enviado com sucesso!');
+                    // Limpar campos
+                    document.getElementById('singleSendPhone').value = '';
+                    document.getElementById('singleSendFunnel').value = '';
+                    document.getElementById('singleSendInstance').value = '';
+                } else {
+                    alert('❌ Erro: ' + (result.error || 'Erro ao enviar funil'));
+                }
+            } catch (error) {
+                console.error('Erro ao enviar funil:', error);
+                alert('❌ Erro ao enviar funil: ' + error.message);
+            }
+        }
     </script>
     <script src="/new-functions.js"></script>
 </body>
