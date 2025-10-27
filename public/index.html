@@ -2034,18 +2034,22 @@
 
             container.innerHTML = campaigns.map(campaign => {
                 const statusColors = {
-                    active: '#10b981',
+                    running: '#10b981',
                     paused: '#f59e0b',
                     stopped: '#dc2626',
                     completed: '#6b7280'
                 };
                 
                 const statusLabels = {
-                    active: '🟢 Ativa',
+                    running: '🟢 Rodando',
                     paused: '🟡 Pausada',
                     stopped: '🔴 Parada',
                     completed: '✅ Concluída'
                 };
+                
+                const percentage = campaign.progress.total > 0 
+                    ? Math.round((campaign.progress.sent / campaign.progress.total) * 100) 
+                    : 0;
 
                 return `
                     <div style="background: white; border: 2px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-bottom: 16px;">
@@ -2061,38 +2065,34 @@
                             <div style="display: flex; gap: 8px;">
                                 ${campaign.status === 'paused' ? 
                                     `<button class="btn btn-success btn-small" onclick="startCampaign('${campaign.id}')">▶️ Iniciar</button>` : ''}
-                                ${campaign.status === 'active' ? 
+                                ${campaign.status === 'running' ? 
                                     `<button class="btn btn-small" style="background: #f59e0b;" onclick="pauseCampaign('${campaign.id}')">⏸️ Pausar</button>` : ''}
-                                ${campaign.status === 'active' || campaign.status === 'paused' ? 
+                                ${campaign.status === 'running' || campaign.status === 'paused' ? 
                                     `<button class="btn btn-danger btn-small" onclick="stopCampaign('${campaign.id}')">⏹️ Parar</button>` : ''}
                                 <button class="btn btn-small" onclick="viewCampaignDetails('${campaign.id}')">👁️ Ver</button>
-                                ${campaign.status !== 'active' ? 
+                                ${campaign.status !== 'running' ? 
                                     `<button class="btn btn-danger btn-small" onclick="deleteCampaign('${campaign.id}')">🗑️</button>` : ''}
                             </div>
                         </div>
 
                         <!-- Barra de Progresso -->
                         <div style="background: #e5e7eb; height: 8px; border-radius: 4px; overflow: hidden; margin-bottom: 8px;">
-                            <div style="background: #667eea; height: 100%; width: ${campaign.progress.percentage}%; transition: width 0.3s;"></div>
+                            <div style="background: #667eea; height: 100%; width: ${percentage}%; transition: width 0.3s;"></div>
                         </div>
-                        <div style="font-size: 12px; color: #6b7280; text-align: right;">${campaign.progress.percentage}% completo</div>
+                        <div style="font-size: 12px; color: #6b7280; text-align: right;">${percentage}% completo</div>
                         
-                        <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 16px; font-size: 13px;">
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 16px; font-size: 13px;">
                             <div style="background: #f8fafc; padding: 8px; border-radius: 6px;">
                                 <div style="color: #6b7280;">Funil</div>
                                 <div style="font-weight: 600; color: #1f2937;">${campaign.funnelId}</div>
                             </div>
                             <div style="background: #f8fafc; padding: 8px; border-radius: 6px;">
-                                <div style="color: #6b7280;">Horário</div>
-                                <div style="font-weight: 600; color: #1f2937;">${String(campaign.schedule.startHour).padStart(2,'0')}:${String(campaign.schedule.startMin).padStart(2,'0')} - ${String(campaign.schedule.endHour).padStart(2,'0')}:${String(campaign.schedule.endMin).padStart(2,'0')}</div>
+                                <div style="color: #6b7280;">Instância</div>
+                                <div style="font-weight: 600; color: #1f2937;">${campaign.instanceName || 'N/A'}</div>
                             </div>
                             <div style="background: #f8fafc; padding: 8px; border-radius: 6px;">
                                 <div style="color: #6b7280;">Delay</div>
                                 <div style="font-weight: 600; color: #1f2937;">${campaign.delayMin}-${campaign.delayMax} min</div>
-                            </div>
-                            <div style="background: #f8fafc; padding: 8px; border-radius: 6px;">
-                                <div style="color: #6b7280;">Limite/Dia</div>
-                                <div style="font-weight: 600; color: #1f2937;">${campaign.dailyLimitPerInstance} leads</div>
                             </div>
                         </div>
                     </div>
