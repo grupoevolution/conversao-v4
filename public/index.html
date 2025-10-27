@@ -1005,9 +1005,13 @@
                 loadEvents();
             } else if (tabName === 'phrases') {
                 loadPhrases();
-                loadManualTriggers(); // 🆕 NOVO
+                if (typeof populateSingleSendFunnels === 'function') {
+                    populateSingleSendFunnels();
+                }
             } else if (tabName === 'remarketing') {
-                loadCampaigns(); // 🆕 NOVO: Carregar campanhas
+                if (typeof loadCampaigns === 'function') {
+                    loadCampaigns();
+                }
             }
         }
 
@@ -1933,6 +1937,16 @@
             await loadAllFunnels();
             loadDashboard();
             
+            // Aguardar new-functions.js carregar e então popular os selects
+            setTimeout(() => {
+                if (typeof populateSingleSendFunnels === 'function') {
+                    populateSingleSendFunnels();
+                }
+                if (typeof loadCampaigns === 'function') {
+                    loadCampaigns();
+                }
+            }, 500);
+            
             // Atualizar dados periodicamente
             setInterval(() => {
                 loadDashboard();
@@ -1941,7 +1955,10 @@
                     loadEvents();
                 } else if (activeTab.id === 'phrases') {
                     loadPhrases();
-                    loadManualTriggers(); // 🆕 NOVO
+                } else if (activeTab.id === 'remarketing') {
+                    if (typeof loadCampaigns === 'function') {
+                        loadCampaigns();
+                    }
                 }
             }, 10000);
         });
