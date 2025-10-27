@@ -1691,6 +1691,27 @@ app.get('/api/campaigns', (req, res) => {
     res.json({ success: true, data: campaignsList });
 });
 
+// Função para validar lista de telefones
+function validatePhoneList(phoneList) {
+    const phones = phoneList.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+    const validPhones = [];
+    const invalidPhones = [];
+    
+    phones.forEach(phone => {
+        // Remover caracteres não numéricos
+        const cleanPhone = phone.replace(/\D/g, '');
+        
+        // Validar: deve ter entre 10 e 13 dígitos
+        if (cleanPhone.length >= 10 && cleanPhone.length <= 13) {
+            validPhones.push(cleanPhone);
+        } else {
+            invalidPhones.push(phone);
+        }
+    });
+    
+    return { validPhones, invalidPhones };
+}
+
 // Criar campanha
 app.post('/api/campaigns', async (req, res) => {
     try {
