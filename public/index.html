@@ -2124,8 +2124,11 @@
             const funnelId = document.getElementById('campaignFunnel').value;
             const instanceId = document.getElementById('campaignInstance').value;
             const phoneList = document.getElementById('campaignPhones').value.trim();
+            const startTime = document.getElementById('campaignStartTime').value;
+            const endTime = document.getElementById('campaignEndTime').value;
             const delayMin = parseInt(document.getElementById('campaignDelayMin').value);
             const delayMax = parseInt(document.getElementById('campaignDelayMax').value);
+            const dailyLimit = parseInt(document.getElementById('campaignDailyLimit').value);
 
             if (!name || !funnelId || !phoneList || !instanceId) {
                 alert('⚠️ Preencha todos os campos obrigatórios!');
@@ -2136,6 +2139,9 @@
                 alert('⚠️ Delay mínimo deve ser menor que o máximo!');
                 return;
             }
+
+            const [startHour, startMin] = startTime.split(':').map(Number);
+            const [endHour, endMin] = endTime.split(':').map(Number);
 
             try {
                 const response = await fetch('/api/campaigns', {
@@ -2294,12 +2300,28 @@
                         </div>
 
                         <h3 style="margin-bottom: 16px;">Detalhes da Campanha</h3>
-                        <div style="background: #f8fafc; padding: 16px; border-radius: 8px;">
+                        <div style="background: #f8fafc; padding: 16px; border-radius: 8px; margin-bottom: 16px;">
                             <p><strong>Instância:</strong> ${campaign.instanceId}</p>
                             <p><strong>Funil:</strong> ${campaign.funnelId}</p>
                             <p><strong>Delay:</strong> ${campaign.delayMin}-${campaign.delayMax} minutos</p>
                             <p><strong>Total de leads:</strong> ${campaign.progress.total}</p>
+                            <p><strong>Status:</strong> ${campaign.status === 'running' ? '🟢 Rodando' : campaign.status === 'paused' ? '⏸️ Pausada' : '⏹️ Parada'}</p>
                         </div>
+
+                        <h3 style="margin-bottom: 16px;">Últimos Leads Enviados</h3>
+                        <div style="max-height: 300px; overflow-y: auto; background: #f8fafc; padding: 12px; border-radius: 8px;">
+                            ${campaign.leadsSent && campaign.leadsSent.length > 0 
+                                ? campaign.leadsSent.slice(-10).reverse().map(lead => `
+                                    <div style="padding: 8px; border-bottom: 1px solid #e5e7eb;">
+                                        <span style="font-weight: 600;">${lead.phone}</span> - 
+                                        <span style="color: #6b7280; font-size: 12px;">${new Date(lead.sentAt).toLocaleString('pt-BR')}</span>
+                                    </div>
+                                `).join('')
+                                : '<p style="color: #6b7280; text-align: center; padding: 20px;">Nenhum lead enviado ainda</p>'
+                            }
+                        </div>
+                    `;
+
                     document.getElementById('modalCampaignContent').innerHTML = html;
                     document.getElementById('campaignModal').style.display = 'block';
                 } else {
