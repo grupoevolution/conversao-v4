@@ -1079,6 +1079,26 @@
             if (currentManualValue) {
                 manualModalFunnel.value = currentManualValue;
             }
+
+            // 🔧 CORREÇÃO: Atualizar dropdown de funis no ENVIO ÚNICO MANUAL
+            const singleSendFunnel = document.getElementById('singleSendFunnel');
+            if (singleSendFunnel) {
+                const currentSingleValue = singleSendFunnel.value;
+                singleSendFunnel.innerHTML = '<option value="">Selecione um funil</option>';
+                
+                Object.values(allFunnels).forEach(funnel => {
+                    if (funnel.id.startsWith('PHRASE_') || funnel.id.startsWith('CS_') || funnel.id.startsWith('FB_')) {
+                        const option = document.createElement('option');
+                        option.value = funnel.id;
+                        option.textContent = funnel.name;
+                        singleSendFunnel.appendChild(option);
+                    }
+                });
+                
+                if (currentSingleValue) {
+                    singleSendFunnel.value = currentSingleValue;
+                }
+            }
         }
 
         function loadFunnelEditor() {
@@ -1987,7 +2007,7 @@
         
         async function loadCampaigns() {
             try {
-                const response = await fetch('/api/remarketing/campaigns');
+                const response = await fetch('/api/campaigns');
                 const result = await response.json();
                 
                 if (result.success) {
@@ -2102,14 +2122,12 @@
         async function createCampaign() {
             const name = document.getElementById('campaignName').value.trim();
             const funnelId = document.getElementById('campaignFunnel').value;
+            const instanceId = document.getElementById('campaignInstance').value;
             const phoneList = document.getElementById('campaignPhones').value.trim();
-            const startTime = document.getElementById('campaignStartTime').value;
-            const endTime = document.getElementById('campaignEndTime').value;
             const delayMin = parseInt(document.getElementById('campaignDelayMin').value);
             const delayMax = parseInt(document.getElementById('campaignDelayMax').value);
-            const dailyLimit = parseInt(document.getElementById('campaignDailyLimit').value);
 
-            if (!name || !funnelId || !phoneList) {
+            if (!name || !funnelId || !phoneList || !instanceId) {
                 alert('⚠️ Preencha todos os campos obrigatórios!');
                 return;
             }
@@ -2119,21 +2137,17 @@
                 return;
             }
 
-            const [startHour, startMin] = startTime.split(':').map(Number);
-            const [endHour, endMin] = endTime.split(':').map(Number);
-
             try {
-                const response = await fetch('/api/remarketing/campaigns', {
+                const response = await fetch('/api/campaigns', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         name,
                         funnelId,
+                        instanceId,
                         phoneList,
-                        schedule: { startHour, startMin, endHour, endMin },
                         delayMin,
-                        delayMax,
-                        dailyLimitPerInstance: dailyLimit
+                        delayMax
                     })
                 });
 
@@ -2141,9 +2155,9 @@
 
                 if (result.success) {
                     let msg = `✅ Campanha "${name}" criada com sucesso!\n\n`;
-                    msg += `✅ ${result.campaign.leads.length} números válidos\n`;
-                    if (result.invalidPhones && result.invalidPhones.length > 0) {
-                        msg += `⚠️ ${result.invalidPhones.length} números inválidos foram ignorados`;
+                    msg += `✅ ${result.validPhones} números válidos\n`;
+                    if (result.invalidPhones > 0) {
+                        msg += `⚠️ ${result.invalidPhones} números inválidos foram ignorados`;
                     }
                     alert(msg);
                     hideNewCampaignForm();
@@ -2167,8 +2181,8 @@
             }
 
             try {
-                const response = await fetch(`/api/remarketing/campaigns/${id}/start`, {
-                    method: 'PUT'
+                const response = await fetch(`/api/campaigns/${id}/start`, {
+                    method: 'POST'
                 });
 
                 const result = await response.json();
@@ -2187,8 +2201,8 @@
 
         async function pauseCampaign(id) {
             try {
-                const response = await fetch(`/api/remarketing/campaigns/${id}/pause`, {
-                    method: 'PUT'
+                const response = await fetch(`/api/campaigns/${id}/pause`, {
+                    method: 'POST'
                 });
 
                 const result = await response.json();
@@ -2211,8 +2225,8 @@
             }
 
             try {
-                const response = await fetch(`/api/remarketing/campaigns/${id}/stop`, {
-                    method: 'PUT'
+                const response = await fetch(`/api/campaigns/${id}/pause`, {
+                    method: 'POST'
                 });
 
                 const result = await response.json();
@@ -2235,7 +2249,7 @@
             }
 
             try {
-                const response = await fetch(`/api/remarketing/campaigns/${id}`, {
+                const response = await fetch(`/api/campaigns/${id}`, {
                     method: 'DELETE'
                 });
 
@@ -2255,12 +2269,11 @@
 
         async function viewCampaignDetails(id) {
             try {
-                const response = await fetch(`/api/remarketing/campaigns/${id}/status`);
+                const response = await fetch(`/api/campaigns/${id}`);
                 const result = await response.json();
 
                 if (result.success) {
-                    const campaign = result.campaign;
-                    const instances = result.instancesStatus;
+                    const campaign = result.data;
 
                     document.getElementById('modalCampaignName').textContent = campaign.name;
                     
@@ -2280,35 +2293,13 @@
                             </div>
                         </div>
 
-                        <h3 style="margin-bottom: 16px;">Status das Instâncias</h3>
-                        <div style="max-height: 400px; overflow-y: auto;">
-                            <table style="width: 100%; border-collapse: collapse;">
-                                <thead style="position: sticky; top: 0; background: white;">
-                                    <tr style="background: #f8fafc;">
-                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #e5e7eb;">Instância</th>
-                                        <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">Enviados Hoje</th>
-                                        <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">Status</th>
-                                        <th style="padding: 12px; text-align: center; border-bottom: 2px solid #e5e7eb;">Último Envio</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    ${instances.map(inst => `
-                                        <tr style="border-bottom: 1px solid #e5e7eb;">
-                                            <td style="padding: 12px; font-weight: 600;">${inst.name}</td>
-                                            <td style="padding: 12px; text-align: center;">${inst.sentToday}/${inst.limit}</td>
-                                            <td style="padding: 12px; text-align: center;">
-                                                ${inst.available ? '🟢 Disponível' : '🔴 Limite'}
-                                            </td>
-                                            <td style="padding: 12px; text-align: center; font-size: 12px; color: #6b7280;">
-                                                ${inst.lastSend ? new Date(inst.lastSend).toLocaleTimeString('pt-BR') : '-'}
-                                            </td>
-                                        </tr>
-                                    `).join('')}
-                                </tbody>
-                            </table>
+                        <h3 style="margin-bottom: 16px;">Detalhes da Campanha</h3>
+                        <div style="background: #f8fafc; padding: 16px; border-radius: 8px;">
+                            <p><strong>Instância:</strong> ${campaign.instanceId}</p>
+                            <p><strong>Funil:</strong> ${campaign.funnelId}</p>
+                            <p><strong>Delay:</strong> ${campaign.delayMin}-${campaign.delayMax} minutos</p>
+                            <p><strong>Total de leads:</strong> ${campaign.progress.total}</p>
                         </div>
-                    `;
-
                     document.getElementById('modalCampaignContent').innerHTML = html;
                     document.getElementById('campaignModal').style.display = 'block';
                 } else {
