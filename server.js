@@ -1910,10 +1910,6 @@ app.get('/api/debug/evolution', async (req, res) => {
     res.json(debugInfo);
 });
 
-app.get('/new-functions.js', (req, res) => {
-    res.sendFile(path.join(__dirname, 'new-functions.js'));
-});
-
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
